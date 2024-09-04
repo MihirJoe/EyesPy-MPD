@@ -1,1 +1,1 @@
-# EyesPy-MPD
+EyesPy CNN Project
