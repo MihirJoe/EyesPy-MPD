@@ -1,24 +1,13 @@
-# BME5710-Final-Project
+# Install libraries using:
 
-Using GANs for denoising images:
-https://openaccess.thecvf.com/content/ACCV2020/papers/Tran_GAN-based_Noise_Model_for_Denoising_Real_Images_ACCV_2020_paper.pdf
+pip install -r requirements.txt
 
-- Add varying types of noise after each epoch
-- Show training and validation loss over epochs
-- Get close to -20db
-    - Above 19.2
-- K-fold cross validation
-- Bioimaging techniques (Homework 5)
+#### Data is in the Teams at the following directory: 2 - Research and Development > Eye Image Data > Data Labeling > Modeling data > 10-30-24 > model_data
 
-Denoising architecture:
-https://arxiv.org/pdf/2208.14337.pdf
+The annotated data can be seen in the class_vpf_labels.xlsx file (this has the filename, class label, and measurement). 
 
-
-https://optuna.org
-
-Pytorch:
-
-- For training set you should shuffle, not for validation set
-- One loader for each dataset
-- Does the backpropogation internally 
-- self.conv2D = nn.Conv2D() # double check syntax
+To do:
+- update data using Wesley's annotations (need to update excel & add all images to model data)
+- integrate eye tracking code
+- annotate Mihir eye data (focusing more on partial and closed)
+- train model on open source data (labeled by Wesley) & Mihir eye data (labeled by Wesley)

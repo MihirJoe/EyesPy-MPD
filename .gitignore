@@ -1,3 +1,6 @@
 *.pt
 *.tif
 *.jpg
+wandb
+model
+*.pth
