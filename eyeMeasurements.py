@@ -4,6 +4,7 @@ import numpy as np
 import time
 from datetime import datetime
 import pandas as pd
+import os
 
 class EyeTracker:
     def __init__(self):
@@ -17,6 +18,10 @@ class EyeTracker:
         
         # Storage for measurements
         self.measurements = []
+        
+        # Create a directory to save frames and measurements
+        self.output_dir = "eye_tracking_output"
+        os.makedirs(self.output_dir, exist_ok=True)
         
     def calculate_distance(self, point1, point2):
         """Calculate Euclidean distance between two points"""
@@ -37,33 +42,81 @@ class EyeTracker:
                 y = landmarks.part(n).y
                 left_eye_points.append((x, y))
             
-            # Calculate measurements
-            upper_lid = left_eye_points[1]  # Point 37
-            lower_lid = left_eye_points[4]  # Point 40
-            pupil_center = (
+            # Get right eye landmarks
+            right_eye_points = []
+            for n in range(42, 48):
+                x = landmarks.part(n).x
+                y = landmarks.part(n).y
+                right_eye_points.append((x, y))
+            
+            # Calculate measurements for left eye
+            left_upper_lid = left_eye_points[1]  # Point 37
+            left_lower_lid = left_eye_points[4]  # Point 40
+            left_pupil_center = (
                 (left_eye_points[0][0] + left_eye_points[3][0]) // 2,
                 (left_eye_points[1][1] + left_eye_points[4][1]) // 2
             )
             
-            # Calculate distances
-            palpebral_height = self.calculate_distance(upper_lid, lower_lid)
-            pupil_to_lower = self.calculate_distance(pupil_center, lower_lid)
+            # Calculate distances for left eye
+            left_palpebral_height = self.calculate_distance(left_upper_lid, left_lower_lid)
+            left_pupil_to_lower = self.calculate_distance(left_pupil_center, left_lower_lid)
+            
+            # Calculate measurements for right eye
+            right_upper_lid = right_eye_points[1]  # Point 43
+            right_lower_lid = right_eye_points[4]  # Point 46
+            right_pupil_center = (
+                (right_eye_points[0][0] + right_eye_points[3][0]) // 2,
+                (right_eye_points[1][1] + right_eye_points[4][1]) // 2
+            )
+            
+            # Calculate distances for right eye
+            right_palpebral_height = self.calculate_distance(right_upper_lid, right_lower_lid)
+            right_pupil_to_lower = self.calculate_distance(right_pupil_center, right_lower_lid)
             
             # Draw measurements on frame
-            cv2.line(frame, upper_lid, lower_lid, (0, 255, 0), 1)
-            cv2.line(frame, pupil_center, lower_lid, (255, 0, 0), 1)
+            cv2.line(frame, left_upper_lid, left_lower_lid, (0, 255, 0), 1)
+            cv2.line(frame, left_pupil_center, left_lower_lid, (255, 0, 0), 1)
+            cv2.line(frame, right_upper_lid, right_lower_lid, (0, 255, 0), 1)
+            cv2.line(frame, right_pupil_center, right_lower_lid, (255, 0, 0), 1)
             
-            # Draw points
+            # Draw points for left eye
             for point in left_eye_points:
-                cv2.circle(frame, point, 2, (0, 0, 255), -1)
-            cv2.circle(frame, pupil_center, 2, (255, 255, 0), -1)
+                cv2.circle(frame, point, 2, (0, 0, 255), -1)  # Red dot for left eye
+            cv2.circle(frame, left_pupil_center, 2, (255, 255, 0), -1)  # Yellow dot for left pupil
             
-            return frame, palpebral_height, pupil_to_lower
+            # Draw points for right eye
+            for point in right_eye_points:
+                cv2.circle(frame, point, 2, (0, 0, 255), -1)  # Red dot for right eye
+            cv2.circle(frame, right_pupil_center, 2, (255, 255, 0), -1)  # Yellow dot for right pupil
+            
+            # Create larger bounding boxes around eyes
+            left_eye_rect = cv2.boundingRect(np.array(left_eye_points))
+            right_eye_rect = cv2.boundingRect(np.array(right_eye_points))
+            
+            # Increase the size of the bounding box
+            left_eye_rect = (left_eye_rect[0] - 20, left_eye_rect[1] - 10, 
+                             left_eye_rect[2] + 40, left_eye_rect[3] + 20)  # Adjust as needed
+            right_eye_rect = (right_eye_rect[0] - 20, right_eye_rect[1] - 10, 
+                              right_eye_rect[2] + 40, right_eye_rect[3] + 20)  # Adjust as needed
+            
+            # Save the eye regions as images
+            left_eye_image = frame[left_eye_rect[1]:left_eye_rect[1] + left_eye_rect[3], 
+                                    left_eye_rect[0]:left_eye_rect[0] + left_eye_rect[2]]
+            right_eye_image = frame[right_eye_rect[1]:right_eye_rect[1] + right_eye_rect[3], 
+                                     right_eye_rect[0]:right_eye_rect[0] + right_eye_rect[2]]
+            
+            # Save the images to the output directory
+            left_eye_filename = os.path.join(self.output_dir, f"left_eye_{int(time.time())}.jpg")
+            right_eye_filename = os.path.join(self.output_dir, f"right_eye_{int(time.time())}.jpg")
+            cv2.imwrite(left_eye_filename, left_eye_image)
+            cv2.imwrite(right_eye_filename, right_eye_image)
+            
+            return frame, (left_palpebral_height, left_pupil_to_lower), (right_palpebral_height, right_pupil_to_lower)
         
-        return frame, None, None
+        return frame, (None, None), (None, None)
     
-    def run(self, duration=20):
-        """Run eye tracking for specified duration"""
+    def run_live(self, duration=20):
+        """Run eye tracking for live video"""
         start_time = time.time()
         
         while True:
@@ -74,25 +127,29 @@ class EyeTracker:
             current_time = time.time() - start_time
             
             # Process frame
-            frame, palpebral_height, pupil_to_lower = self.get_eye_measurements(frame)
+            frame, left_measurements, right_measurements = self.get_eye_measurements(frame)
             
-            if palpebral_height and pupil_to_lower:
+            if left_measurements[0] is not None and right_measurements[0] is not None:
                 # Store measurements
                 self.measurements.append({
                     'timestamp': current_time,
-                    'palpebral_height': palpebral_height,
-                    'pupil_to_lower': pupil_to_lower
+                    'left_palpebral_height': left_measurements[0],
+                    'left_pupil_to_lower': left_measurements[1],
+                    'right_palpebral_height': right_measurements[0],
+                    'right_pupil_to_lower': right_measurements[1]
                 })
                 
                 # Display measurements
-                cv2.putText(frame, f"Palpebral Height: {palpebral_height:.2f}", 
+                cv2.putText(frame, f"Left Palpebral Height: {left_measurements[0]:.2f}", 
                            (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-                cv2.putText(frame, f"Pupil to Lower: {pupil_to_lower:.2f}", 
+                cv2.putText(frame, f"Left Pupil to Lower: {left_measurements[1]:.2f}", 
                            (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-                cv2.putText(frame, f"Time: {current_time:.1f}s", 
+                cv2.putText(frame, f"Right Palpebral Height: {right_measurements[0]:.2f}", 
                            (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+                cv2.putText(frame, f"Right Pupil to Lower: {right_measurements[1]:.2f}", 
+                           (10, 120), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
             
-            cv2.imshow('Eye Tracking', frame)
+            cv2.imshow('Eye Tracking - Live', frame)
             
             # Exit conditions
             if cv2.waitKey(1) & 0xFF == ord('q') or current_time >= duration:
@@ -100,7 +157,48 @@ class EyeTracker:
         
         self.cleanup()
         self.save_measurements()
-    
+
+    def run_video(self, video_path):
+        """Run eye tracking for uploaded video"""
+        cap = cv2.VideoCapture(video_path)
+        
+        while cap.isOpened():
+            ret, frame = cap.read()
+            if not ret:
+                break
+            
+            # Process frame
+            frame, left_measurements, right_measurements = self.get_eye_measurements(frame)
+            
+            if left_measurements[0] is not None and right_measurements[0] is not None:
+                # Store measurements
+                self.measurements.append({
+                    'timestamp': cap.get(cv2.CAP_PROP_POS_MSEC) / 1000,  # Convert to seconds
+                    'left_palpebral_height': left_measurements[0],
+                    'left_pupil_to_lower': left_measurements[1],
+                    'right_palpebral_height': right_measurements[0],
+                    'right_pupil_to_lower': right_measurements[1]
+                })
+                
+                # Display measurements
+                cv2.putText(frame, f"Left Palpebral Height: {left_measurements[0]:.2f}", 
+                           (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+                cv2.putText(frame, f"Left Pupil to Lower: {left_measurements[1]:.2f}", 
+                           (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+                cv2.putText(frame, f"Right Palpebral Height: {right_measurements[0]:.2f}", 
+                           (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+                cv2.putText(frame, f"Right Pupil to Lower: {right_measurements[1]:.2f}", 
+                           (10, 120), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+            
+            cv2.imshow('Eye Tracking - Video', frame)
+            
+            # Exit conditions
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                break
+        
+        cap.release()
+        self.save_measurements()
+
     def cleanup(self):
         """Release resources"""
         self.cap.release()
@@ -110,13 +208,32 @@ class EyeTracker:
         """Save measurements to CSV file"""
         if self.measurements:
             df = pd.DataFrame(self.measurements)
-            filename = f"eye_measurements_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+            filename = os.path.join(self.output_dir, f"eye_measurements_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv")
             df.to_csv(filename, index=False)
             print(f"Measurements saved to {filename}")
 
-if __name__ == "__main__":
-    # Create and run tracker
+def main():
     tracker = EyeTracker()
-    print("Starting eye tracking for 20 seconds...")
-    print("Press 'q' to quit early")
-    tracker.run(duration=20)
+    
+    print("Select an option:")
+    print("1. Live Video")
+    print("2. Upload Video")
+    
+    choice = input("Enter 1 or 2: ")
+    
+    if choice == '1':
+        print("Starting eye tracking for live video...")
+        print("Press 'q' to quit early")
+        tracker.run_live(duration=20)
+    elif choice == '2':
+        video_path = input("Enter the path to the video file: ")
+        tracker.run_video(video_path)
+    else:
+        print("Invalid choice. Exiting.")
+
+if __name__ == "__main__":
+    main()
+
+
+## TODO:
+# - fix the video upload eye capture
