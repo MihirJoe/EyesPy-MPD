@@ -4,6 +4,8 @@ import os
 import cv2
 import numpy 
 from scipy import ndimage
+import left_and_right_eye_measurements 
+
 
 """ Write Functions Here """ 
 
@@ -280,7 +282,7 @@ def downsample_to_ideal(image, ideal_shape = [256,256], a=0.4):
 
 
 
-def change_resolution(image, ideal_shape = [256,256], testing=False):
+def change_resolution(image, ideal_shape = [256,256], testing=False, saving=False):
 # Function that takes an array of images as an input and updates the resolution of each image to make the ideal shape. 
 # Uses blurring or reverse blurring/sharpening to decrease and increase resolution (respectively)
 # Inputs:
@@ -290,24 +292,58 @@ def change_resolution(image, ideal_shape = [256,256], testing=False):
 #   resized_images: The image array where each image has been resized to the ideal_shape
 
     # first, reduce to grayscale
+    image = numpy.array(image).astype('uint8')
     resized_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
     # while loop to determine if image is correct size
     flag = True
     while(flag):
         if resized_image.shape[0] > ideal_shape[0] * 2: # if image is too large, blur and downsample
-            if testing: 
-                print('Blurring')
+            if testing:
+                print(f'Blurring: {resized_image.shape} vs {ideal_shape}')
             resized_image = blur_and_sample(resized_image)
         elif resized_image.shape[0] < ideal_shape[0]: # if image is too small, sharpen/interpolated it
             resized_image = sharpen(resized_image)
             if testing:
-                print("Sharpening")
+                print(f'Sharpening: {resized_image.shape} vs {ideal_shape}')
         else:
             resized_image = downsample_to_ideal(resized_image, ideal_shape)
             flag = False
 
     return resized_image
+
+def change_resolution_frames(images, ideal_shape = [256,256], eye_type="left", testing=False, saving=False):
+# Function that takes an array of images as an input and updates the resolution of each image to make the ideal shape. 
+# Uses blurring or reverse blurring/sharpening to decrease and increase resolution (respectively)
+# Inputs:
+#   images: A LIST of images
+#   ideal_shape: The desired dimensions of each image. Has a default value to match the ML model expected input
+#   testing: prints helpful debugging outputs if true
+#   eye_type: "left" or "right" - impacts file name if saving
+#   saving: saves each image if true
+# Outputs:  
+#   resized_images: The image array where each image has been resized to the ideal_shape
+
+    # create array to hold new images
+    # save frame dimensions, use to initialize an array to store the frames
+    frame_dim = list(ideal_shape)
+    frame_dim.insert(0, len(images))
+    resized_images = numpy.zeros(frame_dim).astype('uint8')
+
+    # Create output directory if it doesn't exist
+    output_dir = './cropped_eyes/'
+    os.makedirs(output_dir, exist_ok=True)
+
+    for frame in range(0, len(images)):
+        this_frame = change_resolution(images[frame], ideal_shape, testing, saving)
+        resized_images[frame,:,:] = this_frame
+
+        if saving:
+            output_path = os.path.join(output_dir, f"frame_{frame:04d}_{eye_type}_eye.jpg")
+            cv2.imwrite(output_path, this_frame)
+    
+    return(resized_images)
+
 
 def apply_ML_model(images):
 # Function that takes an array of images as an input, applies the ML model to each individual image/frame,
@@ -351,8 +387,8 @@ base_images = GUI_to_get_data(testing=False,saving=True)
 right_eye_frames, left_eye_frames = isolate_eye_images(base_images, saving=True, testing=False)
 
 # Change the resolution of the image to match the resolution that the ML model expects
-right_eye_frames = change_resolution(right_eye_frames)
-left_eye_frames = change_resolution(left_eye_frames)
+right_eye_frames = change_resolution_frames(right_eye_frames)
+left_eye_frames = change_resolution_frames(left_eye_frames)
 
 # Put the images through the NN and get the output parameter predictions
 right_eye_measurements = apply_ML_model(right_eye_frames)
