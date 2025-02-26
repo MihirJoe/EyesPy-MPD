@@ -39,6 +39,8 @@ class EyeTracker:
         """Extract eye measurements from a single frame"""
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         faces = self.detector(gray)
+
+        originalFrame = frame
         
         for face in faces:
             landmarks = self.predictor(gray, face)
@@ -104,9 +106,11 @@ class EyeTracker:
             # Increase the size of the bounding box and make square
             if self.testing:
                 print(f'Left Eye Rectange: {left_eye_rect}')
-            left_eye_largest_side = max(left_eye_rect[3] - left_eye_rect[0], left_eye_rect[2] - left_eye_rect[1])
-            left_eye_rect = (left_eye_rect[0] - 20, left_eye_rect[1] - 10, 
-                             left_eye_rect[2] + 40, left_eye_rect[3] + 20)  # Adjust as needed
+            left_eye_width = int(1.5 * max(left_eye_rect[2:3]))
+            left_eye_offset = int(left_eye_width/2)
+
+            left_eye_rect = (int(left_eye_rect[0] + left_eye_rect[2]/2 - left_eye_offset), int(left_eye_rect[1] + left_eye_rect[3]/2 - left_eye_offset), 
+                             left_eye_width, left_eye_width)  # Adjust as needed
             right_eye_rect = (right_eye_rect[0] - 20, right_eye_rect[1] - 10, 
                               right_eye_rect[2] + 40, right_eye_rect[3] + 20)  # Adjust as needed
             
@@ -115,12 +119,15 @@ class EyeTracker:
                                     left_eye_rect[0]:left_eye_rect[0] + left_eye_rect[2]]
             right_eye_image = frame[right_eye_rect[1]:right_eye_rect[1] + right_eye_rect[3], 
                                      right_eye_rect[0]:right_eye_rect[0] + right_eye_rect[2]]
-            
             self.left_eye_frames.append(left_eye_image)
             self.right_eye_frames.append(right_eye_image)
             
             # Save the images to the output directory
             if self.saving:
+                left_eye_image = originalFrame[left_eye_rect[1]:left_eye_rect[1] + left_eye_rect[3], 
+                                    left_eye_rect[0]:left_eye_rect[0] + left_eye_rect[2]]
+                right_eye_image = originalFrame[right_eye_rect[1]:right_eye_rect[1] + right_eye_rect[3], 
+                                     right_eye_rect[0]:right_eye_rect[0] + right_eye_rect[2]]
                 left_eye_filename = os.path.join(self.output_dir, f"left_eye_{int(time.time())}.jpg")
                 right_eye_filename = os.path.join(self.output_dir, f"right_eye_{int(time.time())}.jpg")
                 cv2.imwrite(left_eye_filename, left_eye_image)

@@ -4,7 +4,7 @@ import os
 import cv2
 import numpy 
 from scipy import ndimage
-import left_and_right_eye_measurements 
+from left_and_right_eye_measurements import EyeTracker
 
 
 """ Write Functions Here """ 
@@ -81,18 +81,48 @@ def get_data_from_file(file_name, testing=False, saving=False):
     return images
 
 def GUI_to_get_data(testing=False, saving=False):
-# Function that displays a GUI the patient interacts with to collect an image/video from a file OR via live feed from the camera
+# Function that displays a GUI the patient interacts with to collect an image/video from a file OR via live feed from the camera. 
+# The function then uses the EyeTracker class to collect predicted measurements and isolated frames of each eye for the image. 
 # Input: 
 #   Saving - Saves each frame as a file if true
 #   Testing - Prints helpful outputs
 # Output: 
-#   images - Array of images (all frames if video input) from the file
+#   right_eye_measurements: list of dictionaries of eye measurements for each frame for the right eye (VPH, MRD1)
+#   left_eye_measurements: list of dictionaries of eye measurements for each frame for the left eye (VPH, MRD1)
+#   right_eye_images: list of isolated, cropped images of the right eye for every frame
+#   left_eye_images: list of isolated, cropped images of the left eye for every frame
+
     # for now - request file name from screen
-    file_name = './' + input(f"Enter the file name (must be in your current folder or a nested folder) of the video you would like to parse: ")
+    print("Select an option:")
+    print("1. Live Video")
+    print("2. Upload Video")
+    
+    choice = input("Enter 1 or 2: ")
+    
+    if choice == '1': # live video collection
+        print("Starting eye tracking for live video...")
+        print("Press 'q' to quit early")
+        tracker = EyeTracker(0)
+        tracker.run(duration=20)
+    elif choice == '2': # file video collection
+        video_path = input("Enter the path to the video file: ")
+        tracker = EyeTracker(video_path)
+        tracker.run()
+    else:
+        print("Invalid choice. Exiting.")
 
-    images = get_data_from_file(file_name, testing=testing, saving=saving)
-    return images
+    # save outputs
+    
+    right_eye_measurements = [{key: dictionary[key] for key in {'right_palpebral_height', 'right_pupil_to_lower'} if key in dictionary} for dictionary in tracker.measurements]
+    left_eye_measurements = [{key: dictionary[key] for key in {'left_palpebral_height', 'left_pupil_to_lower'} if key in dictionary} for dictionary in tracker.measurements]
+    # print(right_eye_measurements)
+    left_eye_frames = tracker.left_eye_frames
+    right_eye_frames = tracker.right_eye_frames
 
+
+    return right_eye_measurements, left_eye_measurements, right_eye_frames, left_eye_frames 
+
+""" DELETE THIS FUNCTION """
 def isolate_eye_images(images, testing=False, saving=False):
 # Function that takes in an array of face images and outputs two arrays of eye images (one for each eye)
 # Input: 
@@ -345,16 +375,18 @@ def change_resolution_frames(images, ideal_shape = [256,256], eye_type="left", t
     return(resized_images)
 
 
-def apply_ML_model(images):
+def apply_ML_model(measurements, images):
 # Function that takes an array of images as an input, applies the ML model to each individual image/frame,
 # and outputs the resulting data as an array
 # Input: 
-#   images: An array of images
+#   measurements: list of dictionaries of measurements for each image (VPH in col 1, MRD1 in col 2)
+#   images: An array of images (in corresponding order)
 # Output:
 #   ml_predicted_values: An array of ML model predicted values corresponding to the array of images 
 #                        (UPDATE TO INLCUDE PARAMETERS IN WHICH COLUMNS)
 
-    ml_predicted_values = 0
+    print(f"apply_ML_model function is currently blank")
+    ml_predicted_values = measurements
 
     return ml_predicted_values
 
@@ -367,7 +399,10 @@ def display_GUI_from_data(right_eye_data, left_eye_data, right_eye_images, left_
 #   left_eye_images: array of isolated, cropped images of the left eye for every frame
 # Outputs:
 #   None
+    print(f"display_GUI_from_data function is currently blank")
 
+    print(f"Sample Output\nRight Eye Frame 1: {right_eye_data[0]}")
+    print(f"Sample Output\nLeft Eye Frame 1: {left_eye_data[0]}")
 
     return
 
@@ -377,22 +412,19 @@ def display_GUI_from_data(right_eye_data, left_eye_data, right_eye_images, left_
 # for now get data from a file
 # Recommended: file_name = './Rachel_120fps_1080p.mov'
 
-# get frames as an array of images
-base_images = GUI_to_get_data(testing=False,saving=True)
+# collect video and output predicted measurements and frames for each eye
+right_eye_measurements, left_eye_measurements, right_eye_frames, left_eye_frames = GUI_to_get_data(testing=False,saving=True)
 
 # testing if this is working
 # plt.imshow(base_images[1,:])
 
-# get isolated images for each eye for each frame
-right_eye_frames, left_eye_frames = isolate_eye_images(base_images, saving=True, testing=False)
-
 # Change the resolution of the image to match the resolution that the ML model expects
-right_eye_frames = change_resolution_frames(right_eye_frames)
-left_eye_frames = change_resolution_frames(left_eye_frames)
+right_eye_frames = change_resolution_frames(right_eye_frames, eye_type='right', saving=True)
+left_eye_frames = change_resolution_frames(left_eye_frames,  eye_type='left', saving=True)
 
 # Put the images through the NN and get the output parameter predictions
-right_eye_measurements = apply_ML_model(right_eye_frames)
-left_eye_measurements = apply_ML_model(left_eye_frames)
+right_eye_measurements = apply_ML_model(right_eye_measurements, right_eye_frames)
+left_eye_measurements = apply_ML_model(left_eye_measurements, left_eye_frames)
 
 # Plug data into GUI to display to the doctor
 display_GUI_from_data(right_eye_measurements, left_eye_measurements, right_eye_frames, left_eye_frames)
