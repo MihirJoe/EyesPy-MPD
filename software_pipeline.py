@@ -3,6 +3,7 @@
 import os
 import cv2
 import numpy 
+import glob
 from scipy import ndimage
 from left_and_right_eye_measurements import EyeTracker
 
@@ -102,25 +103,20 @@ def GUI_to_get_data(testing=False, saving=False):
     if choice == '1': # live video collection
         print("Starting eye tracking for live video...")
         print("Press 'q' to quit early")
-        tracker = EyeTracker(0)
-        tracker.run(duration=20)
+        tracker = EyeTracker(0, saving=saving)
+        csv_file = tracker.run(duration=20)
     elif choice == '2': # file video collection
         video_path = input("Enter the path to the video file: ")
-        tracker = EyeTracker(video_path)
-        tracker.run()
+        tracker = EyeTracker(video_path, saving=saving)
+        csv_file = tracker.run()
     else:
         print("Invalid choice. Exiting.")
 
     # save outputs
-    
-    right_eye_measurements = [{key: dictionary[key] for key in {'right_palpebral_height', 'right_pupil_to_lower'} if key in dictionary} for dictionary in tracker.measurements]
-    left_eye_measurements = [{key: dictionary[key] for key in {'left_palpebral_height', 'left_pupil_to_lower'} if key in dictionary} for dictionary in tracker.measurements]
-    # print(right_eye_measurements)
-    left_eye_frames = tracker.left_eye_frames
-    right_eye_frames = tracker.right_eye_frames
+    folder_with_images = tracker.get_output_dir()
 
 
-    return right_eye_measurements, left_eye_measurements, right_eye_frames, left_eye_frames 
+    return csv_file, folder_with_images
 
 """ DELETE THIS FUNCTION """
 def isolate_eye_images(images, testing=False, saving=False):
@@ -342,67 +338,69 @@ def change_resolution(image, ideal_shape = [256,256], testing=False, saving=Fals
 
     return resized_image
 
-def change_resolution_frames(images, ideal_shape = [256,256], eye_type="left", testing=False, saving=False):
+def change_resolution_frames(eye_images_folder, ideal_shape = [256,256], output_dir='./cropped_eyes/', testing=False, saving=True):
 # Function that takes an array of images as an input and updates the resolution of each image to make the ideal shape. 
 # Uses blurring or reverse blurring/sharpening to decrease and increase resolution (respectively)
 # Inputs:
-#   images: A LIST of images
+#   eye_images_folder: File path to folder where eye images are saved 
 #   ideal_shape: The desired dimensions of each image. Has a default value to match the ML model expected input
 #   testing: prints helpful debugging outputs if true
-#   eye_type: "left" or "right" - impacts file name if saving
 #   saving: saves each image if true
+#   output_dir: if you want to manually set the output_directory
 # Outputs:  
-#   resized_images: The image array where each image has been resized to the ideal_shape
+#   output_dir: The folder with the cropped eye images
 
-    # create array to hold new images
-    # save frame dimensions, use to initialize an array to store the frames
-    frame_dim = list(ideal_shape)
-    frame_dim.insert(0, len(images))
-    resized_images = numpy.zeros(frame_dim).astype('uint8')
+    # create array to hold filenames of each image
+    glob_search = './' + eye_images_folder + '/' + '*' + '.jpg'
+    img_filenames = glob.glob(glob_search)
+
+    if testing:
+        print(f'Glob search for "{glob_search}" yielded {len(img_filenames)} images' )
 
     # Create output directory if it doesn't exist
-    output_dir = './cropped_eyes/'
     os.makedirs(output_dir, exist_ok=True)
 
-    for frame in range(0, len(images)):
-        this_frame = change_resolution(images[frame], ideal_shape, testing, saving)
-        resized_images[frame,:,:] = this_frame
+    for fname in img_filenames:
+        if testing:
+            print(fname)
+        frame = cv2.imread(fname)
+        this_frame = change_resolution(frame, ideal_shape, testing, saving)
 
         if saving:
-            output_path = os.path.join(output_dir, f"frame_{frame:04d}_{eye_type}_eye.jpg")
+            output_path = fname.replace(eye_images_folder, output_dir)
             cv2.imwrite(output_path, this_frame)
     
-    return(resized_images)
+    return(output_dir)
 
 
-def apply_ML_model(measurements, images):
+def apply_ML_model(eye_data_filename, eye_images_folder):
 # Function that takes an array of images as an input, applies the ML model to each individual image/frame,
 # and outputs the resulting data as an array
 # Input: 
-#   measurements: list of dictionaries of measurements for each image (VPH in col 1, MRD1 in col 2)
-#   images: An array of images (in corresponding order)
+#   eye_data_filename: File path where the eye measurements are saved in csv format (with headers: 
+#                      "timestamp,left_palpebral_height,left_pupil_to_lower,right_palpebral_height,right_pupil_to_lower")
+#   eye_images_folder: File path to folder where eye images are saved 
 # Output:
-#   ml_predicted_values: An array of ML model predicted values corresponding to the array of images 
+#   updated_eye_data_filename: A csv file with updated measurements for each frame
 #                        (UPDATE TO INLCUDE PARAMETERS IN WHICH COLUMNS)
 
     print(f"apply_ML_model function is currently blank")
-    ml_predicted_values = measurements
+    updated_eye_data_filename = eye_data_filename
 
-    return ml_predicted_values
+    return updated_eye_data_filename
 
-def display_GUI_from_data(right_eye_data, left_eye_data, right_eye_images, left_eye_images):
+def display_GUI_from_data(eye_data_filename, eye_images_folder):
 # Function to display the functional GUI with the input data
 # Inputs:
-#   right_eye_data: Array of predicted parameter values for the right eye images
-#   left_eye_data: Array of predicted parameter values for the left eye images
-#   right_eye_images: array of isolated, cropped images of the right eye for every frame
-#   left_eye_images: array of isolated, cropped images of the left eye for every frame
+#   eye_data_filename: File path where the eye measurements are saved in csv format (with headers: 
+#                      "timestamp,left_palpebral_height,left_pupil_to_lower,right_palpebral_height,right_pupil_to_lower")
+#   eye_images_folder: File path to folder where eye images are saved 
 # Outputs:
 #   None
     print(f"display_GUI_from_data function is currently blank")
 
-    print(f"Sample Output\nRight Eye Frame 1: {right_eye_data[0]}")
-    print(f"Sample Output\nLeft Eye Frame 1: {left_eye_data[0]}")
+    print(f"The Eye Data is Saved in: {eye_data_filename}")
+    print(f"The Eye Images are in: {eye_images_folder}")
 
     return
 
@@ -413,19 +411,17 @@ def display_GUI_from_data(right_eye_data, left_eye_data, right_eye_images, left_
 # Recommended: file_name = './Rachel_120fps_1080p.mov'
 
 # collect video and output predicted measurements and frames for each eye
-right_eye_measurements, left_eye_measurements, right_eye_frames, left_eye_frames = GUI_to_get_data(testing=False,saving=True)
+csv_file, folder_with_images = GUI_to_get_data(testing=False,saving=True)
 
 # testing if this is working
 # plt.imshow(base_images[1,:])
 
 # Change the resolution of the image to match the resolution that the ML model expects
-right_eye_frames = change_resolution_frames(right_eye_frames, eye_type='right', saving=True)
-left_eye_frames = change_resolution_frames(left_eye_frames,  eye_type='left', saving=True)
+folder_with_cropped_frames = change_resolution_frames(folder_with_images, saving=True, testing=False)
 
 # Put the images through the NN and get the output parameter predictions
-right_eye_measurements = apply_ML_model(right_eye_measurements, right_eye_frames)
-left_eye_measurements = apply_ML_model(left_eye_measurements, left_eye_frames)
+updated_csv_file = apply_ML_model(csv_file, folder_with_cropped_frames)
 
 # Plug data into GUI to display to the doctor
-display_GUI_from_data(right_eye_measurements, left_eye_measurements, right_eye_frames, left_eye_frames)
+display_GUI_from_data(updated_csv_file, folder_with_images)
 

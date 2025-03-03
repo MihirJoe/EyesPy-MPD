@@ -31,6 +31,10 @@ class EyeTracker:
         self.file = file
 
         
+    def get_output_dir(self):
+        """return the output directory containing the images"""
+        return self.output_dir
+    
     def calculate_distance(self, point1, point2):
         """Calculate Euclidean distance between two points"""
         return np.sqrt((point1[0] - point2[0])**2 + (point1[1] - point2[1])**2)
@@ -109,10 +113,13 @@ class EyeTracker:
             left_eye_width = int(1.5 * max(left_eye_rect[2:3]))
             left_eye_offset = int(left_eye_width/2)
 
+            right_eye_width = int(1.5 * max(right_eye_rect[2:3]))
+            right_eye_offset = int(right_eye_width/2)
+
             left_eye_rect = (int(left_eye_rect[0] + left_eye_rect[2]/2 - left_eye_offset), int(left_eye_rect[1] + left_eye_rect[3]/2 - left_eye_offset), 
                              left_eye_width, left_eye_width)  # Adjust as needed
-            right_eye_rect = (right_eye_rect[0] - 20, right_eye_rect[1] - 10, 
-                              right_eye_rect[2] + 40, right_eye_rect[3] + 20)  # Adjust as needed
+            right_eye_rect = (int(right_eye_rect[0] + right_eye_rect[2]/2 - right_eye_offset), int(right_eye_rect[1] + right_eye_rect[3]/2 - right_eye_offset), 
+                             right_eye_width, right_eye_width)  # Adjust as needed
             
             # Save the eye regions as images
             left_eye_image = frame[left_eye_rect[1]:left_eye_rect[1] + left_eye_rect[3], 
@@ -178,7 +185,9 @@ class EyeTracker:
                 break
         
         self.cleanup()
-        self.save_measurements()
+        csv_file = self.save_measurements()
+
+        return csv_file
 
     def run_video(self):
         """Run eye tracking for uploaded video"""
@@ -218,7 +227,8 @@ class EyeTracker:
                 break
         
         self.cap.release()
-        self.save_measurements()
+        csv_file = self.save_measurements()
+        return csv_file
 
     def cleanup(self):
         """Release resources"""
@@ -232,6 +242,8 @@ class EyeTracker:
             filename = os.path.join(self.output_dir, f"eye_measurements_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv")
             df.to_csv(filename, index=False)
             print(f"Measurements saved to {filename}")
+
+            return filename
 
 def main():
     
