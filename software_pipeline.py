@@ -6,6 +6,8 @@ import numpy
 import glob
 from scipy import ndimage
 from left_and_right_eye_measurements import EyeTracker
+import torch
+from eyespy_mpd_NN import ModifiedUNet
 
 
 """ Write Functions Here """ 
@@ -383,6 +385,14 @@ def apply_ML_model(eye_data_filename, eye_images_folder):
 # Output:
 #   updated_eye_data_filename: A csv file with updated measurements for each frame
 #                        (UPDATE TO INLCUDE PARAMETERS IN WHICH COLUMNS)
+   
+    # load model from file
+    model_filename = False
+    if model_filename:
+        model = ModifiedUNet()
+        model.load_state_dict(torch.load(model_filename))
+        model.eval()
+    
 
     print(f"apply_ML_model function is currently blank")
     updated_eye_data_filename = eye_data_filename
