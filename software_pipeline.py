@@ -8,6 +8,13 @@ from scipy import ndimage
 from left_and_right_eye_measurements import EyeTracker
 import torch
 from eyespy_mpd_NN import ModifiedUNet
+from eyespy_gui import EyeTrackingGUI
+import tkinter as tk
+import matplotlib
+
+matplotlib.use("TkAgg")  # Ensure Matplotlib integrates with Tkinter
+
+testGUI = False # true to show GUI, false to show dummy function
 
 
 """ Write Functions Here """ 
@@ -407,10 +414,17 @@ def display_GUI_from_data(eye_data_filename, eye_images_folder):
 #   eye_images_folder: File path to folder where eye images are saved 
 # Outputs:
 #   None
-    print(f"display_GUI_from_data function is currently blank")
+    if testGUI:
+        print("GUI is currently in progress - Numbers may not be correct")
+        root = tk.Tk()
+        app = EyeTrackingGUI(root, eye_images_folder, eye_data_filename)
+        root.mainloop()
+    
+    else:
+        print(f"display_GUI_from_data function is currently blank")
 
-    print(f"The Eye Data is Saved in: {eye_data_filename}")
-    print(f"The Eye Images are in: {eye_images_folder}")
+        print(f"The Eye Data is Saved in: {eye_data_filename}")
+        print(f"The Eye Images are in: {eye_images_folder}")
 
     return
 

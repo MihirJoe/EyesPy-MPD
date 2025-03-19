@@ -64,44 +64,40 @@ class EyeTracker:
                 right_eye_points.append((x, y))
             
             # Calculate measurements for left eye
-            left_upper_lid = left_eye_points[1]  # Point 37
-            left_lower_lid = left_eye_points[4]  # Point 40
+            left_upper_lid = (
+                (left_eye_points[1][0] + left_eye_points[2][0]) // 2,
+                (left_eye_points[1][1] + left_eye_points[2][1]) // 2
+            )# Avg of Point 37 and Point 38
+            left_lower_lid = (
+                (left_eye_points[4][0] + left_eye_points[5][0]) // 2,
+                (left_eye_points[4][1] + left_eye_points[5][1]) // 2
+            ) # Avg of Points 40 and 41
             left_pupil_center = (
                 (left_eye_points[0][0] + left_eye_points[3][0]) // 2,
                 (left_eye_points[1][1] + left_eye_points[4][1]) // 2
-            )
+            ) # midpoint of points 37, 38, 40, and 41
             
             # Calculate distances for left eye
-            left_palpebral_height = self.calculate_distance(left_upper_lid, left_lower_lid)
-            left_pupil_to_lower = self.calculate_distance(left_pupil_center, left_lower_lid)
+            left_vph = self.calculate_distance(left_upper_lid, left_lower_lid) #vertical palebral height
+            left_mrd1 = self.calculate_distance(left_upper_lid, left_pupil_center) #mrd1 = pupil to upper
             
             # Calculate measurements for right eye
-            right_upper_lid = right_eye_points[1]  # Point 43
-            right_lower_lid = right_eye_points[4]  # Point 46
+            right_upper_lid = (
+                (right_eye_points[1][0] + right_eye_points[2][0]) // 2,
+                (right_eye_points[1][1] + right_eye_points[2][1]) // 2
+            ) # Midpoint of points 43 and 44
+            right_lower_lid = (
+                (right_eye_points[4][0] + right_eye_points[5][0]) // 2,
+                (right_eye_points[4][1] + right_eye_points[5][1]) // 2
+            ) # Midpoint of points 46 and 47
             right_pupil_center = (
                 (right_eye_points[0][0] + right_eye_points[3][0]) // 2,
                 (right_eye_points[1][1] + right_eye_points[4][1]) // 2
-            )
+            ) # midpoint of points 43, 44, 46, and 47
             
             # Calculate distances for right eye
-            right_palpebral_height = self.calculate_distance(right_upper_lid, right_lower_lid)
-            right_pupil_to_lower = self.calculate_distance(right_pupil_center, right_lower_lid)
-            
-            # Draw measurements on frame
-            cv2.line(frame, left_upper_lid, left_lower_lid, (0, 255, 0), 1)
-            cv2.line(frame, left_pupil_center, left_lower_lid, (255, 0, 0), 1)
-            cv2.line(frame, right_upper_lid, right_lower_lid, (0, 255, 0), 1)
-            cv2.line(frame, right_pupil_center, right_lower_lid, (255, 0, 0), 1)
-            
-            # Draw points for left eye
-            for point in left_eye_points:
-                cv2.circle(frame, point, 2, (0, 0, 255), -1)  # Red dot for left eye
-            cv2.circle(frame, left_pupil_center, 2, (255, 255, 0), -1)  # Yellow dot for left pupil
-            
-            # Draw points for right eye
-            for point in right_eye_points:
-                cv2.circle(frame, point, 2, (0, 0, 255), -1)  # Red dot for right eye
-            cv2.circle(frame, right_pupil_center, 2, (255, 255, 0), -1)  # Yellow dot for right pupil
+            right_vph = self.calculate_distance(right_upper_lid, right_lower_lid) # vertical palpebral height
+            right_mrd1 = self.calculate_distance(right_upper_lid, right_pupil_center) # mrd1 = upper lid to pupil
             
             # Create larger bounding boxes around eyes
             left_eye_rect = cv2.boundingRect(np.array(left_eye_points))
@@ -139,8 +135,24 @@ class EyeTracker:
                 right_eye_filename = os.path.join(self.output_dir, f"right_eye_{int(time.time())}.jpg")
                 cv2.imwrite(left_eye_filename, left_eye_image)
                 cv2.imwrite(right_eye_filename, right_eye_image)
+
+            # Draw measurements on frame to show video with measurements
+            cv2.line(frame, left_upper_lid, left_lower_lid, (0, 255, 0), 1)
+            cv2.line(frame, left_pupil_center, left_upper_lid, (255, 0, 0), 1)
+            cv2.line(frame, right_upper_lid, right_lower_lid, (0, 255, 0), 1)
+            cv2.line(frame, right_pupil_center, right_upper_lid, (255, 0, 0), 1)
             
-            return frame, (left_palpebral_height, left_pupil_to_lower), (right_palpebral_height, right_pupil_to_lower)
+            # Draw points for left eye
+            for point in left_eye_points:
+                cv2.circle(frame, point, 2, (0, 0, 255), -1)  # Red dot for left eye
+            cv2.circle(frame, left_pupil_center, 2, (255, 255, 0), -1)  # Yellow dot for left pupil
+            
+            # Draw points for right eye
+            for point in right_eye_points:
+                cv2.circle(frame, point, 2, (0, 0, 255), -1)  # Red dot for right eye
+            cv2.circle(frame, right_pupil_center, 2, (255, 255, 0), -1)  # Yellow dot for right pupil
+            
+            return frame, (left_vph, left_mrd1), (right_vph, right_mrd1)
         
         return frame, (None, None), (None, None)
     
@@ -162,20 +174,20 @@ class EyeTracker:
                 # Store measurements
                 self.measurements.append({
                     'timestamp': current_time,
-                    'left_palpebral_height': left_measurements[0],
-                    'left_pupil_to_lower': left_measurements[1],
-                    'right_palpebral_height': right_measurements[0],
-                    'right_pupil_to_lower': right_measurements[1]
+                    'left_vph': left_measurements[0],
+                    'left_mrd1': left_measurements[1],
+                    'right_vph': right_measurements[0],
+                    'right_mrd1': right_measurements[1]
                 })
                 
                 # Display measurements
-                cv2.putText(frame, f"Left Palpebral Height: {left_measurements[0]:.2f}", 
+                cv2.putText(frame, f"Left VPH (Vertical Palebral Height): {left_measurements[0]:.2f}", 
                            (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-                cv2.putText(frame, f"Left Pupil to Lower: {left_measurements[1]:.2f}", 
+                cv2.putText(frame, f"Left MRD1 (Margin to Reflex Distance 1): {left_measurements[1]:.2f}", 
                            (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-                cv2.putText(frame, f"Right Palpebral Height: {right_measurements[0]:.2f}", 
+                cv2.putText(frame, f"Right VPH (Vertical Palebral Height): {right_measurements[0]:.2f}", 
                            (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-                cv2.putText(frame, f"Right Pupil to Lower: {right_measurements[1]:.2f}", 
+                cv2.putText(frame, f"Right MRD1 (Margin to Reflex Distance 1): {right_measurements[1]:.2f}", 
                            (10, 120), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
             
             cv2.imshow('Eye Tracking - Live', frame)
