@@ -2,19 +2,32 @@ import cv2
 import dlib
 import numpy as np
 import time
+import tkinter as tk
+from tkinter import filedialog
+from PIL import Image, ImageTk
 from datetime import datetime
 import pandas as pd
 import os
 
+testing = False # True to print helpful messages when debugging
+
 class EyeTracker:
-    def __init__(self, file=0, saving=False, testing = False):
+    def __init__(self, saving=False, testing = False):
         # Initialize face detector and facial landmark predictor
         self.detector = dlib.get_frontal_face_detector()
         self.predictor = dlib.shape_predictor("shape_predictor_68_face_landmarks.dat")
         
-        # Initialize video capture
-        self.cap = cv2.VideoCapture(file)
-        self.cap.set(cv2.CAP_PROP_FPS, 30)
+        # Create a GUI app 
+        self.app = tk.Tk() 
+        self.app.title("Video Upload")
+        
+        # Bind the app with Escape keyboard to 
+        # quit app whenever pressed 
+        self.app.bind('<Escape>', lambda e: self.app.quit()) 
+        
+        # Create a label and display it on app 
+        self.label_widget = tk.Label(self.app) 
+        self.label_widget.pack() 
         
         # Storage for measurements
         self.measurements = []
@@ -28,7 +41,6 @@ class EyeTracker:
         # save constructor inputs
         self.testing= testing
         self.saving = saving
-        self.file = file
 
         
     def get_output_dir(self):
@@ -156,96 +168,126 @@ class EyeTracker:
         
         return frame, (None, None), (None, None)
     
-    def run(self, duration=20):
-        """Run eye tracking for live video"""
-        start_time = time.time()
+    def run_video(self, duration=20):
+        """Run eye tracking for the video in self.cap"""
         
-        while True:
-            ret, frame = self.cap.read()
-            if not ret:
-                break
-            
-            current_time = time.time() - start_time
-            
-            # Process frame
-            frame, left_measurements, right_measurements = self.get_eye_measurements(frame)
-            
-            if left_measurements[0] is not None and right_measurements[0] is not None:
-                # Store measurements
-                self.measurements.append({
-                    'timestamp': current_time,
-                    'left_vph': left_measurements[0],
-                    'left_mrd1': left_measurements[1],
-                    'right_vph': right_measurements[0],
-                    'right_mrd1': right_measurements[1]
-                })
-                
-                # Display measurements
-                cv2.putText(frame, f"Left VPH (Vertical Palebral Height): {left_measurements[0]:.2f}", 
-                           (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-                cv2.putText(frame, f"Left MRD1 (Margin to Reflex Distance 1): {left_measurements[1]:.2f}", 
-                           (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-                cv2.putText(frame, f"Right VPH (Vertical Palebral Height): {right_measurements[0]:.2f}", 
-                           (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-                cv2.putText(frame, f"Right MRD1 (Margin to Reflex Distance 1): {right_measurements[1]:.2f}", 
-                           (10, 120), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-            
-            cv2.imshow('Eye Tracking - Live', frame)
-            
-            # Exit conditions
-            if cv2.waitKey(1) & 0xFF == ord('q') or (current_time >= duration and self.file==0):
-                break
+        ret, frame = self.cap.read()
+        if not ret:
+            self.csv_file = self.save_measurements()
+            self.cleanup()
+            return
         
-        self.cleanup()
-        csv_file = self.save_measurements()
+        current_time = time.time() - self.start_time
+        
+        # Process frame
+        frame, left_measurements, right_measurements = self.get_eye_measurements(frame)
+        
+        if left_measurements[0] is not None and right_measurements[0] is not None:
+            # Store measurements
+            self.measurements.append({
+                'timestamp': current_time,
+                'left_vph': left_measurements[0],
+                'left_mrd1': left_measurements[1],
+                'right_vph': right_measurements[0],
+                'right_mrd1': right_measurements[1]
+            })
+            
+            # Display measurements
+            cv2.putText(frame, f"Left VPH (Vertical Palebral Height): {left_measurements[0]:.2f}", 
+                        (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+            cv2.putText(frame, f"Left MRD1 (Margin to Reflex Distance 1): {left_measurements[1]:.2f}", 
+                        (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+            cv2.putText(frame, f"Right VPH (Vertical Palebral Height): {right_measurements[0]:.2f}", 
+                        (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+            cv2.putText(frame, f"Right MRD1 (Margin to Reflex Distance 1): {right_measurements[1]:.2f}", 
+                        (10, 120), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+        
+        # Convert image from one color space to other 
+        opencv_image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGBA) 
+    
+        # Capture the latest frame and transform to image 
+        captured_image = Image.fromarray(opencv_image) 
+    
+        # Convert captured image to photoimage 
+        photo_image = ImageTk.PhotoImage(image=captured_image) 
+    
+        # Displaying photoimage in the label 
+        self.label_widget.photo_image = photo_image 
+    
+        # Configure image in the label 
+        self.label_widget.configure(image=photo_image) 
 
-        return csv_file
+        # Exit conditions
+        if (cv2.waitKey(1) & 0xFF == ord('q')) or (current_time >= duration and self.filename==0):
+            self.csv_file = self.save_measurements()
+            self.cleanup()
+            return
+    
+        # Repeat the same process after every 10 seconds if exit conditions are not met
+        self.label_widget.after(10, self.run_video) 
 
-    def run_video(self):
-        """Run eye tracking for uploaded video"""
+        """ Have to rewrite to work in tkinter using .after method... Sucks. But will work with GUI once done. 
+            https://www.geeksforgeeks.org/how-to-show-webcam-in-tkinter-window-python/ """
+        # cv2.imshow('Eye Tracking - Live', frame)
+            
+
+
+    def run_live(self):
+        """Set up cv2.cap object for live video collection"""
         
-        while self.cap.isOpened():
-            ret, frame = self.cap.read()
-            if not ret:
-                break
-            
-            # Process frame
-            frame, left_measurements, right_measurements = self.get_eye_measurements(frame)
-            
-            if left_measurements[0] is not None and right_measurements[0] is not None:
-                # Store measurements
-                self.measurements.append({
-                    'timestamp': self.cap.get(cv2.CAP_PROP_POS_MSEC) / 1000,  # Convert to seconds
-                    'left_palpebral_height': left_measurements[0],
-                    'left_pupil_to_lower': left_measurements[1],
-                    'right_palpebral_height': right_measurements[0],
-                    'right_pupil_to_lower': right_measurements[1]
-                })
-                
-                # Display measurements
-                cv2.putText(frame, f"Left Palpebral Height: {left_measurements[0]:.2f}", 
-                           (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-                cv2.putText(frame, f"Left Pupil to Lower: {left_measurements[1]:.2f}", 
-                           (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-                cv2.putText(frame, f"Right Palpebral Height: {right_measurements[0]:.2f}", 
-                           (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-                cv2.putText(frame, f"Right Pupil to Lower: {right_measurements[1]:.2f}", 
-                           (10, 120), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-            
-            cv2.imshow('Eye Tracking - Video', frame)
-            
-            # Exit conditions
-            if cv2.waitKey(1) & 0xFF == ord('q'):
-                break
+        # no file, filename = 0
+        self.filename = 0
+
+        # Initialize video capture and setup tkinter window
+        self.cap = cv2.VideoCapture(self.filename)
+        self.cap.set(cv2.CAP_PROP_FPS, 30)
         
-        self.cap.release()
-        csv_file = self.save_measurements()
-        return csv_file
+        # Declare the width and height in variables 
+        width, height = 800, 600
+        
+        # Set the width and height 
+        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, width) 
+        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height) 
+
+
+        self.start_time = time.time()
+        self.run_video()
+
+    
+    def get_file(self):
+        """Allow tkinter to let user choose a file."""
+        # Define allowable filetypes
+        filetypes = (
+            ('MOV files', '*.mov'),
+            ('MP4 files', '*.mp4'),
+            ('Other Video files', '*.*')
+        )
+
+        self.filename = filedialog.askopenfilename(
+            title='Open a Video or Image File',
+            initialdir='./',
+            filetypes=filetypes)
+
+        # Initialize video capture and setup tkinter window
+        self.cap = cv2.VideoCapture(self.filename)
+        
+        # Declare the width and height in variables 
+        width, height = 800, 600
+        
+        # Set the width and height 
+        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, width) 
+        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height) 
+
+        # run the video through the algorithm
+        self.start_time = time.time()
+        self.run_video()
+
 
     def cleanup(self):
         """Release resources"""
+        self.app.quit()
         self.cap.release()
-        cv2.destroyAllWindows()
+
     
     def save_measurements(self):
         """Save measurements to CSV file"""
@@ -256,30 +298,31 @@ class EyeTracker:
             print(f"Measurements saved to {filename}")
 
             return filename
+        
+    def run(self):
+        """Create interactive GUI and use it to start data collection from the uploaded video or from the live video"""
+        # Create a button to open the camera in GUI app 
+        button1 = tk.Button(self.app, text="Take Live Video", command=self.run_live) 
+        button1.pack() 
+
+        button2 = tk.Button(self.app, text="Upload Video File", command=self.get_file)
+        button2.pack()
+        
+        # Create an infinite loop for displaying app on screen 
+        self.app.mainloop() 
 
 def main():
-    
-    print("Select an option:")
-    print("1. Live Video")
-    print("2. Upload Video")
-    
-    choice = input("Enter 1 or 2: ")
-    
-    if choice == '1':
-        print("Starting eye tracking for live video...")
-        print("Press 'q' to quit early")
-        tracker = EyeTracker(0, saving=True, testing=False)
-        tracker.run(duration=20)
-    elif choice == '2':
-        video_path = input("Enter the path to the video file: ")
-        tracker = EyeTracker(video_path, saving=True, testing=False)
-        tracker.run()
-    else:
-        print("Invalid choice. Exiting.")
+    tracker = EyeTracker(saving=True, testing = False)
+    tracker.run()
+
 
 if __name__ == "__main__":
     main()
+    if testing:
+        test = input("Is the video still open?")
 
 
 ## TODO:
-# - fix the video upload eye capture
+# - fix the video to show the measurements
+# - ensure the live video capture still works
+# - why does it not close right after running? 

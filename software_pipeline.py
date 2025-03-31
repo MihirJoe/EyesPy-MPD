@@ -8,13 +8,10 @@ from scipy import ndimage
 from left_and_right_eye_measurements import EyeTracker
 import torch
 from eyespy_mpd_NN import ModifiedUNet
-from eyespy_gui import EyeTrackingGUI
-import tkinter as tk
-import matplotlib
 
-matplotlib.use("TkAgg")  # Ensure Matplotlib integrates with Tkinter
 
-testGUI = False # true to show GUI, false to show dummy function
+testOnlyGUI = False # true to show only GUI, false to show normal operation
+testGUI = True # true to show GUI, false to show dummy function
 
 
 """ Write Functions Here """ 
@@ -97,31 +94,15 @@ def GUI_to_get_data(testing=False, saving=False):
 #   Saving - Saves each frame as a file if true
 #   Testing - Prints helpful outputs
 # Output: 
-#   right_eye_measurements: list of dictionaries of eye measurements for each frame for the right eye (VPH, MRD1)
-#   left_eye_measurements: list of dictionaries of eye measurements for each frame for the left eye (VPH, MRD1)
-#   right_eye_images: list of isolated, cropped images of the right eye for every frame
-#   left_eye_images: list of isolated, cropped images of the left eye for every frame
+#   csv_file: file name for csv file with eye measurements for each frame for the each eye (VPH, MRD1)
+#   folder_with_images: file name for where cropped, color left and right eye images are stored
 
     # for now - request file name from screen
-    print("Select an option:")
-    print("1. Live Video")
-    print("2. Upload Video")
-    
-    choice = input("Enter 1 or 2: ")
-    
-    if choice == '1': # live video collection
-        print("Starting eye tracking for live video...")
-        print("Press 'q' to quit early")
-        tracker = EyeTracker(0, saving=saving)
-        csv_file = tracker.run(duration=20)
-    elif choice == '2': # file video collection
-        video_path = input("Enter the path to the video file: ")
-        tracker = EyeTracker(video_path, saving=saving)
-        csv_file = tracker.run()
-    else:
-        print("Invalid choice. Exiting.")
+    tracker = EyeTracker(saving=True, testing = False)
+    tracker.run()
 
-    # save outputs
+    # save output file names
+    csv_file = tracker.csv_file
     folder_with_images = tracker.get_output_dir()
 
 
@@ -315,8 +296,6 @@ def downsample_to_ideal(image, ideal_shape = [256,256], a=0.4):
 
     return resized_image
 
-
-
 def change_resolution(image, ideal_shape = [256,256], testing=False, saving=False):
 # Function that takes an array of images as an input and updates the resolution of each image to make the ideal shape. 
 # Uses blurring or reverse blurring/sharpening to decrease and increase resolution (respectively)
@@ -415,9 +394,15 @@ def display_GUI_from_data(eye_data_filename, eye_images_folder):
 # Outputs:
 #   None
     if testGUI:
+        import eyespy_gui as gui
+        import tkinter as tk
+        import matplotlib
+        matplotlib.use("TkAgg")  # Ensure Matplotlib integrates with Tkinter
+
         print("GUI is currently in progress - Numbers may not be correct")
-        root = tk.Tk()
-        app = EyeTrackingGUI(root, eye_images_folder, eye_data_filename)
+        root = tk.Tk(baseName="GUI")
+        print("Created Root")
+        app = gui.EyeTrackingGUI(root, eye_images_folder, eye_data_filename) # Will need to add Data filename so its not random data
         root.mainloop()
     
     else:
@@ -429,6 +414,10 @@ def display_GUI_from_data(eye_data_filename, eye_images_folder):
     return
 
 """ Main Section of Code """
+# testing
+if testOnlyGUI:
+    display_GUI_from_data(None, "./eye_tracking_output/")
+    exit
 
 
 # for now get data from a file
@@ -436,6 +425,8 @@ def display_GUI_from_data(eye_data_filename, eye_images_folder):
 
 # collect video and output predicted measurements and frames for each eye
 csv_file, folder_with_images = GUI_to_get_data(testing=False,saving=True)
+#updated_csv_file = None
+#folder_with_images = "./eye_tracking_output/"
 
 # testing if this is working
 # plt.imshow(base_images[1,:])
@@ -447,5 +438,7 @@ folder_with_cropped_frames = change_resolution_frames(folder_with_images, saving
 updated_csv_file = apply_ML_model(csv_file, folder_with_cropped_frames)
 
 # Plug data into GUI to display to the doctor
+"""Source of Error - can't open GUI window when live video window from the GUI_to_get_data is also open: 
+https://stackoverflow.com/questions/24274072/tkinter-pyimage-doesnt-exist """
 display_GUI_from_data(updated_csv_file, folder_with_images)
 
