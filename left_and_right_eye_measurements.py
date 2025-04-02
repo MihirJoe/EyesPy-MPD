@@ -12,7 +12,8 @@ import shutil
 
 WINDOW_WIDTH = 800
 WINDOW_HEIGHT = 600
-ROOT_GEOMETRY = f"{WINDOW_WIDTH}x{WINDOW_HEIGHT}"
+PICTURE_GEOMETRY = f"{WINDOW_WIDTH}x{WINDOW_HEIGHT}"
+WINDOW_ASPECT = WINDOW_WIDTH/WINDOW_HEIGHT
 
 testing = False # True to print helpful messages when debugging
 
@@ -37,6 +38,8 @@ class EyeTracker:
         
         # Create a directory to save frames and measurements
         self.output_dir = "eye_tracking_output"
+        os.makedirs(self.output_dir, exist_ok=True)
+
         # empty folder contents first: 
         for filename in os.listdir(self.output_dir):
             file_path = os.path.join(self.output_dir, filename)
@@ -155,8 +158,8 @@ class EyeTracker:
                                     left_eye_rect[0]:left_eye_rect[0] + left_eye_rect[2]]
                 right_eye_image = originalFrame[right_eye_rect[1]:right_eye_rect[1] + right_eye_rect[3], 
                                      right_eye_rect[0]:right_eye_rect[0] + right_eye_rect[2]]
-                left_eye_filename = os.path.join(self.output_dir, f"left_eye_frame{self.frame_number}.jpg")
-                right_eye_filename = os.path.join(self.output_dir, f"right_eye_frame{self.frame_number}.jpg")
+                left_eye_filename = os.path.join(self.output_dir, f"left_eye_frame{self.frame_number:04d}.jpg")
+                right_eye_filename = os.path.join(self.output_dir, f"right_eye_frame{self.frame_number:04d}.jpg")
                 cv2.imwrite(left_eye_filename, left_eye_image)
                 cv2.imwrite(right_eye_filename, right_eye_image)
 
@@ -199,12 +202,28 @@ class EyeTracker:
             quit_button = tk.Button(self.app, text="Stop Video Collection", command=self.cleanup) 
             quit_button.grid(row=0,column=0) 
 
-            self.label_widget = tk.Label(self.app) 
-            self.label_widget.grid(row=1, column=0)
+            bottom_frame = tk.Frame(self.app, width=WINDOW_WIDTH, height=WINDOW_HEIGHT)
+            bottom_frame.grid(row=1, column=0)
+
+            self.label_widget = tk.Label(bottom_frame) 
 
             # adjust app window size
             dimensions = frame.shape
             # self.app.geometry(f"{dimensions[1]}x{dimensions[0]}")
+            frame_width = dimensions[1] 
+            frame_height = dimensions[0]
+            aspect = frame_width / frame_height
+
+            if aspect >= WINDOW_ASPECT:
+                self.new_width = int(WINDOW_WIDTH)
+                self.new_height = int(self.new_width / aspect)
+            else: 
+                self.new_height = int(WINDOW_HEIGHT)
+                self.new_width = int(self.new_height * aspect)
+
+            # Get necessary dimensions, while maintaining aspect ratio
+
+
 
             if self.testing:
                 print(f"Frame dimensions: {dimensions} = {dimensions[1]}x{dimensions[0]}")
@@ -220,7 +239,7 @@ class EyeTracker:
             # Store measurements
             self.measurements.append({
                 'timestamp': current_time,
-                'frame': self.frame_number,
+                'frame': f"{self.frame_number:04d}",
                 'left_vph': left_measurements[0],
                 'left_mrd1': left_measurements[1],
                 'right_vph': right_measurements[0],
@@ -244,16 +263,16 @@ class EyeTracker:
         captured_image = Image.fromarray(opencv_image) 
     
         # Convert captured image to photoimage 
-        photo_image = ImageTk.PhotoImage(image=captured_image) 
-
-        # resize to fit window
-        #resized_image = photo_image.resize((WINDOW_WIDTH, WINDOW_HEIGHT), Image.ANTIALIAS) 
+        # Get necessary dimensions, while maintaining aspect ratio
+        resized_image = captured_image.resize((self.new_width, self.new_height)) 
+        photo_image = ImageTk.PhotoImage(image=resized_image) 
 
         # Displaying photoimage in the label 
         self.label_widget.photo_image = photo_image 
     
         # Configure image in the label 
         self.label_widget.configure(image=photo_image) 
+        self.label_widget.pack(expand=True, fill='both', ipadx=10, ipady=10)
 
         # Exit conditions
         if (cv2.waitKey(1) & 0xFF == ord('q')) or (current_time >= duration and self.filename==0):

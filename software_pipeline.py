@@ -351,7 +351,9 @@ def change_resolution_frames(eye_images_folder, ideal_shape = [256,256], output_
         print(f'Glob search for "{glob_search}" yielded {len(img_filenames)} images' )
 
     # Create output directory if it doesn't exist
-        # empty folder contents first: 
+    # empty folder contents first: 
+    os.makedirs(output_dir, exist_ok=True)
+
     for filename in os.listdir(output_dir):
         file_path = os.path.join(output_dir, filename)
         try:
