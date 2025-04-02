@@ -12,13 +12,13 @@ import os
 testing = False # True to print helpful messages when debugging
 
 class EyeTracker:
-    def __init__(self, saving=False, testing = False):
+    def __init__(self, app, saving=False, testing = False):
         # Initialize face detector and facial landmark predictor
         self.detector = dlib.get_frontal_face_detector()
         self.predictor = dlib.shape_predictor("shape_predictor_68_face_landmarks.dat")
         
         # Create a GUI app 
-        self.app = tk.Tk() 
+        self.app = app
         self.app.title("Video Upload")
         
         # Bind the app with Escape keyboard to 
@@ -27,7 +27,7 @@ class EyeTracker:
         
         # Create a label and display it on app 
         self.label_widget = tk.Label(self.app) 
-        self.label_widget.pack() 
+        self.label_widget.grid() 
         
         # Storage for measurements
         self.measurements = []
@@ -285,6 +285,8 @@ class EyeTracker:
 
     def cleanup(self):
         """Release resources"""
+        for widget in self.app.grid_slaves():
+            widget.destroy()
         self.app.quit()
         self.cap.release()
 
@@ -303,16 +305,17 @@ class EyeTracker:
         """Create interactive GUI and use it to start data collection from the uploaded video or from the live video"""
         # Create a button to open the camera in GUI app 
         button1 = tk.Button(self.app, text="Take Live Video", command=self.run_live) 
-        button1.pack() 
+        button1.grid() 
 
         button2 = tk.Button(self.app, text="Upload Video File", command=self.get_file)
-        button2.pack()
+        button2.grid()
         
         # Create an infinite loop for displaying app on screen 
         self.app.mainloop() 
 
 def main():
-    tracker = EyeTracker(saving=True, testing = False)
+    app = tk.Tk()
+    tracker = EyeTracker(app, saving=True, testing = False)
     tracker.run()
 
 

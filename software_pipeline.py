@@ -8,6 +8,10 @@ from scipy import ndimage
 from left_and_right_eye_measurements import EyeTracker
 import torch
 from eyespy_mpd_NN import ModifiedUNet
+import eyespy_gui as gui
+import tkinter as tk
+import matplotlib
+matplotlib.use("TkAgg")  # Ensure Matplotlib integrates with Tkinter
 
 
 testOnlyGUI = False # true to show only GUI, false to show normal operation
@@ -87,7 +91,7 @@ def get_data_from_file(file_name, testing=False, saving=False):
 
     return images
 
-def GUI_to_get_data(testing=False, saving=False):
+def GUI_to_get_data(root, testing=False, saving=False):
 # Function that displays a GUI the patient interacts with to collect an image/video from a file OR via live feed from the camera. 
 # The function then uses the EyeTracker class to collect predicted measurements and isolated frames of each eye for the image. 
 # Input: 
@@ -98,7 +102,7 @@ def GUI_to_get_data(testing=False, saving=False):
 #   folder_with_images: file name for where cropped, color left and right eye images are stored
 
     # for now - request file name from screen
-    tracker = EyeTracker(saving=True, testing = False)
+    tracker = EyeTracker(root, saving=True, testing = False)
     tracker.run()
 
     # save output file names
@@ -385,7 +389,7 @@ def apply_ML_model(eye_data_filename, eye_images_folder):
 
     return updated_eye_data_filename
 
-def display_GUI_from_data(eye_data_filename, eye_images_folder):
+def display_GUI_from_data(root, eye_data_filename, eye_images_folder):
 # Function to display the functional GUI with the input data
 # Inputs:
 #   eye_data_filename: File path where the eye measurements are saved in csv format (with headers: 
@@ -394,13 +398,9 @@ def display_GUI_from_data(eye_data_filename, eye_images_folder):
 # Outputs:
 #   None
     if testGUI:
-        import eyespy_gui as gui
-        import tkinter as tk
-        import matplotlib
-        matplotlib.use("TkAgg")  # Ensure Matplotlib integrates with Tkinter
 
         print("GUI is currently in progress - Numbers may not be correct")
-        root = tk.Tk(baseName="GUI")
+        root.title("GUI")
         print("Created Root")
         app = gui.EyeTrackingGUI(root, eye_images_folder, eye_data_filename) # Will need to add Data filename so its not random data
         root.mainloop()
@@ -423,13 +423,13 @@ if testOnlyGUI:
 # for now get data from a file
 # Recommended: file_name = './Rachel_120fps_1080p.mov'
 
+# make tk root
+root = tk.Tk()
+
 # collect video and output predicted measurements and frames for each eye
-csv_file, folder_with_images = GUI_to_get_data(testing=False,saving=True)
+csv_file, folder_with_images = GUI_to_get_data(root, testing=False,saving=True)
 #updated_csv_file = None
 #folder_with_images = "./eye_tracking_output/"
-
-# testing if this is working
-# plt.imshow(base_images[1,:])
 
 # Change the resolution of the image to match the resolution that the ML model expects
 folder_with_cropped_frames = change_resolution_frames(folder_with_images, saving=True, testing=False)
@@ -440,5 +440,5 @@ updated_csv_file = apply_ML_model(csv_file, folder_with_cropped_frames)
 # Plug data into GUI to display to the doctor
 """Source of Error - can't open GUI window when live video window from the GUI_to_get_data is also open: 
 https://stackoverflow.com/questions/24274072/tkinter-pyimage-doesnt-exist """
-display_GUI_from_data(updated_csv_file, folder_with_images)
+display_GUI_from_data(root, updated_csv_file, folder_with_images)
 
