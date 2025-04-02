@@ -8,11 +8,16 @@ from PIL import Image, ImageTk
 from datetime import datetime
 import pandas as pd
 import os
+import shutil
+
+WINDOW_WIDTH = 800
+WINDOW_HEIGHT = 600
+ROOT_GEOMETRY = f"{WINDOW_WIDTH}x{WINDOW_HEIGHT}"
 
 testing = False # True to print helpful messages when debugging
 
 class EyeTracker:
-    def __init__(self, app, saving=False, testing = False):
+    def __init__(self, app, saving=False, testing =False):
         # Initialize face detector and facial landmark predictor
         self.detector = dlib.get_frontal_face_detector()
         self.predictor = dlib.shape_predictor("shape_predictor_68_face_landmarks.dat")
@@ -25,10 +30,6 @@ class EyeTracker:
         # quit app whenever pressed 
         self.app.bind('<Escape>', lambda e: self.app.quit()) 
         
-        # Create a label and display it on app 
-        self.label_widget = tk.Label(self.app) 
-        self.label_widget.grid() 
-        
         # Storage for measurements
         self.measurements = []
         self.left_eye_frames = list()
@@ -36,6 +37,17 @@ class EyeTracker:
         
         # Create a directory to save frames and measurements
         self.output_dir = "eye_tracking_output"
+        # empty folder contents first: 
+        for filename in os.listdir(self.output_dir):
+            file_path = os.path.join(self.output_dir, filename)
+            try:
+                if os.path.isfile(file_path) or os.path.islink(file_path):
+                    os.unlink(file_path)
+                elif os.path.isdir(file_path):
+                    shutil.rmtree(file_path)
+            except Exception as e:
+                print(f"Failed to delete {file_path}. Reason: {e}")
+        # now ensure folder exists
         os.makedirs(self.output_dir, exist_ok=True)
 
         # save constructor inputs
@@ -62,18 +74,18 @@ class EyeTracker:
             landmarks = self.predictor(gray, face)
             
             # Get left eye landmarks
-            left_eye_points = []
+            right_eye_points = []
             for n in range(36, 42):
                 x = landmarks.part(n).x
                 y = landmarks.part(n).y
-                left_eye_points.append((x, y))
+                right_eye_points.append((x, y))
             
             # Get right eye landmarks
-            right_eye_points = []
+            left_eye_points = []
             for n in range(42, 48):
                 x = landmarks.part(n).x
                 y = landmarks.part(n).y
-                right_eye_points.append((x, y))
+                left_eye_points.append((x, y))
             
             # Calculate measurements for left eye
             left_upper_lid = (
@@ -143,8 +155,8 @@ class EyeTracker:
                                     left_eye_rect[0]:left_eye_rect[0] + left_eye_rect[2]]
                 right_eye_image = originalFrame[right_eye_rect[1]:right_eye_rect[1] + right_eye_rect[3], 
                                      right_eye_rect[0]:right_eye_rect[0] + right_eye_rect[2]]
-                left_eye_filename = os.path.join(self.output_dir, f"left_eye_{int(time.time())}.jpg")
-                right_eye_filename = os.path.join(self.output_dir, f"right_eye_{int(time.time())}.jpg")
+                left_eye_filename = os.path.join(self.output_dir, f"left_eye_frame{self.frame_number}.jpg")
+                right_eye_filename = os.path.join(self.output_dir, f"right_eye_frame{self.frame_number}.jpg")
                 cv2.imwrite(left_eye_filename, left_eye_image)
                 cv2.imwrite(right_eye_filename, right_eye_image)
 
@@ -173,10 +185,32 @@ class EyeTracker:
         
         ret, frame = self.cap.read()
         if not ret:
-            self.csv_file = self.save_measurements()
             self.cleanup()
             return
         
+        # adjust the app window to be the size of the first frame
+        if self.frame_number == 0:
+
+            # delete old app widgets
+            for widget in self.app.grid_slaves():
+                widget.destroy()
+
+            # Setup new app widgets 
+            quit_button = tk.Button(self.app, text="Stop Video Collection", command=self.cleanup) 
+            quit_button.grid(row=0,column=0) 
+
+            self.label_widget = tk.Label(self.app) 
+            self.label_widget.grid(row=1, column=0)
+
+            # adjust app window size
+            dimensions = frame.shape
+            # self.app.geometry(f"{dimensions[1]}x{dimensions[0]}")
+
+            if self.testing:
+                print(f"Frame dimensions: {dimensions} = {dimensions[1]}x{dimensions[0]}")
+                print(f"Window Geometry: {self.app.winfo_width()}x{self.app.winfo_height()}")
+            
+
         current_time = time.time() - self.start_time
         
         # Process frame
@@ -186,6 +220,7 @@ class EyeTracker:
             # Store measurements
             self.measurements.append({
                 'timestamp': current_time,
+                'frame': self.frame_number,
                 'left_vph': left_measurements[0],
                 'left_mrd1': left_measurements[1],
                 'right_vph': right_measurements[0],
@@ -210,7 +245,10 @@ class EyeTracker:
     
         # Convert captured image to photoimage 
         photo_image = ImageTk.PhotoImage(image=captured_image) 
-    
+
+        # resize to fit window
+        #resized_image = photo_image.resize((WINDOW_WIDTH, WINDOW_HEIGHT), Image.ANTIALIAS) 
+
         # Displaying photoimage in the label 
         self.label_widget.photo_image = photo_image 
     
@@ -219,11 +257,10 @@ class EyeTracker:
 
         # Exit conditions
         if (cv2.waitKey(1) & 0xFF == ord('q')) or (current_time >= duration and self.filename==0):
-            self.csv_file = self.save_measurements()
             self.cleanup()
             return
-    
-        # Repeat the same process after every 10 seconds if exit conditions are not met
+
+        self.frame_number += 1
         self.label_widget.after(10, self.run_video) 
 
         """ Have to rewrite to work in tkinter using .after method... Sucks. But will work with GUI once done. 
@@ -270,21 +307,16 @@ class EyeTracker:
 
         # Initialize video capture and setup tkinter window
         self.cap = cv2.VideoCapture(self.filename)
-        
-        # Declare the width and height in variables 
-        width, height = 800, 600
-        
-        # Set the width and height 
-        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, width) 
-        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height) 
 
         # run the video through the algorithm
         self.start_time = time.time()
+
         self.run_video()
 
 
     def cleanup(self):
         """Release resources"""
+        self.csv_file = self.save_measurements()
         for widget in self.app.grid_slaves():
             widget.destroy()
         self.app.quit()
@@ -309,13 +341,17 @@ class EyeTracker:
 
         button2 = tk.Button(self.app, text="Upload Video File", command=self.get_file)
         button2.grid()
-        
+
+        # start a counter to adjust the size of the window if its the first frame
+        self.frame_number = 0
+
         # Create an infinite loop for displaying app on screen 
+        #self.app.geometry(ROOT_GEOMETRY)
         self.app.mainloop() 
 
 def main():
     app = tk.Tk()
-    tracker = EyeTracker(app, saving=True, testing = False)
+    tracker = EyeTracker(app, saving=True, testing=False)
     tracker.run()
 
 
@@ -327,5 +363,3 @@ if __name__ == "__main__":
 
 ## TODO:
 # - fix the video to show the measurements
-# - ensure the live video capture still works
-# - why does it not close right after running? 

@@ -1,6 +1,7 @@
 
 """ Import Libraries Here """
 import os
+import shutil
 import cv2
 import numpy 
 import glob
@@ -350,6 +351,16 @@ def change_resolution_frames(eye_images_folder, ideal_shape = [256,256], output_
         print(f'Glob search for "{glob_search}" yielded {len(img_filenames)} images' )
 
     # Create output directory if it doesn't exist
+        # empty folder contents first: 
+    for filename in os.listdir(output_dir):
+        file_path = os.path.join(output_dir, filename)
+        try:
+            if os.path.isfile(file_path) or os.path.islink(file_path):
+                os.unlink(file_path)
+            elif os.path.isdir(file_path):
+                shutil.rmtree(file_path)
+        except Exception as e:
+            print(f"Failed to delete {file_path}. Reason: {e}")
     os.makedirs(output_dir, exist_ok=True)
 
     for fname in img_filenames:
