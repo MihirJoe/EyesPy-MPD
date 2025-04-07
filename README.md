@@ -1,5 +1,5 @@
 # TO DO #
-(4/7)
+[4/7 Demo video (30 sec)](https://youtu.be/FekopEXXwtw)
 - Sync red dot on plot with image display
 - Keep red dot static while secondary gray dot appears for mouse hover
 - Measurement graphs automatically update with hover ✅
@@ -16,6 +16,4 @@
 
 # UI Decisions #
 - Used densely dotted blue (#0072B2) and a orange (#E69F00) for colorblind visibility
-
-[Demo video](https://youtu.be/FekopEXXwtw)
 
