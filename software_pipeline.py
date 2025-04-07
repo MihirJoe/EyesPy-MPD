@@ -9,11 +9,10 @@ from scipy import ndimage
 from left_and_right_eye_measurements import EyeTracker
 import torch
 from eyespy_mpd_NN import ModifiedUNet
-import eyespy_gui as gui
+import display_GUI_from_data as gui
 import tkinter as tk
 import matplotlib
 matplotlib.use("TkAgg")  # Ensure Matplotlib integrates with Tkinter
-
 
 testOnlyGUI = False # true to show only GUI, false to show normal operation
 testGUI = True # true to show GUI, false to show dummy function
@@ -206,6 +205,7 @@ def isolate_eye_images(images, testing=False, saving=False):
 
 
     return right_eye_images, left_eye_images
+""" DELETE THIS FUNCTION """
 
 def blur_and_sample(img, a=0.4):
     # Enter your code here
@@ -234,6 +234,7 @@ def blur_and_sample(img, a=0.4):
     
     return downsampled_img
 
+""" DELETE THIS FUNCTION """
 def sharpen(img):
     # Enter your code here
     
@@ -256,6 +257,7 @@ def sharpen(img):
 
     return upsampled_img
 
+""" DELETE THIS FUNCTION """
 def downsample_to_ideal(image, ideal_shape = [256,256], a=0.4):
 # Function that an image as an input and updates the resolution of each image to make the ideal shape. 
 # Uses downsampling to decrease resolution
@@ -301,6 +303,7 @@ def downsample_to_ideal(image, ideal_shape = [256,256], a=0.4):
 
     return resized_image
 
+""" DELETE THIS FUNCTION """
 def change_resolution(image, ideal_shape = [256,256], testing=False, saving=False):
 # Function that takes an array of images as an input and updates the resolution of each image to make the ideal shape. 
 # Uses blurring or reverse blurring/sharpening to decrease and increase resolution (respectively)
@@ -369,7 +372,8 @@ def change_resolution_frames(eye_images_folder, ideal_shape = [256,256], output_
         if testing:
             print(fname)
         frame = cv2.imread(fname)
-        this_frame = change_resolution(frame, ideal_shape, testing, saving)
+        gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        this_frame = cv2.resize(gray_frame, ideal_shape)
 
         if saving:
             output_path = fname.replace(eye_images_folder, output_dir)
@@ -402,7 +406,7 @@ def apply_ML_model(eye_data_filename, eye_images_folder):
 
     return updated_eye_data_filename
 
-def display_GUI_from_data(root, eye_data_filename, eye_images_folder):
+def display_GUI_from_data(root, eye_images_folder):
 # Function to display the functional GUI with the input data
 # Inputs:
 #   eye_data_filename: File path where the eye measurements are saved in csv format (with headers: 
@@ -415,13 +419,11 @@ def display_GUI_from_data(root, eye_data_filename, eye_images_folder):
         print("GUI is currently in progress - Numbers may not be correct")
         root.title("GUI")
         print("Created Root")
-        app = gui.EyeTrackingGUI(root, eye_images_folder, eye_data_filename) # Will need to add Data filename so its not random data
+        app = gui.EyeTrackingGUI(root, eye_images_folder) # Will need to add Data filename so its not random data
         root.mainloop()
     
     else:
         print(f"display_GUI_from_data function is currently blank")
-
-        print(f"The Eye Data is Saved in: {eye_data_filename}")
         print(f"The Eye Images are in: {eye_images_folder}")
 
     return
@@ -429,7 +431,8 @@ def display_GUI_from_data(root, eye_data_filename, eye_images_folder):
 """ Main Section of Code """
 # testing
 if testOnlyGUI:
-    display_GUI_from_data(None, "./eye_tracking_output/")
+    root = tk.Tk()
+    display_GUI_from_data(root, "./eye_tracking_output/")
     exit
 
 
@@ -451,7 +454,5 @@ folder_with_cropped_frames = change_resolution_frames(folder_with_images, saving
 updated_csv_file = apply_ML_model(csv_file, folder_with_cropped_frames)
 
 # Plug data into GUI to display to the doctor
-"""Source of Error - can't open GUI window when live video window from the GUI_to_get_data is also open: 
-https://stackoverflow.com/questions/24274072/tkinter-pyimage-doesnt-exist """
-display_GUI_from_data(root, updated_csv_file, folder_with_images)
+display_GUI_from_data(root, folder_with_images)
 
