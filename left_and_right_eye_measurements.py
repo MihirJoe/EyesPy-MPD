@@ -231,6 +231,7 @@ class EyeTracker:
             
 
         current_time = time.time() - self.start_time
+        video_time = float(self.frame_number / self.fps)
         
         # Process frame
         frame, left_measurements, right_measurements = self.get_eye_measurements(frame)
@@ -238,7 +239,7 @@ class EyeTracker:
         if left_measurements[0] is not None and right_measurements[0] is not None:
             # Store measurements
             self.measurements.append({
-                'timestamp': current_time,
+                'timestamp': video_time,
                 'frame': f"{self.frame_number:04d}",
                 'left_vph': left_measurements[0],
                 'left_mrd1': left_measurements[1],
@@ -297,6 +298,7 @@ class EyeTracker:
         # Initialize video capture and setup tkinter window
         self.cap = cv2.VideoCapture(self.filename)
         self.cap.set(cv2.CAP_PROP_FPS, 30)
+        self.fps = 30 # set frame rate
         
         # Declare the width and height in variables 
         width, height = 800, 600
@@ -326,6 +328,8 @@ class EyeTracker:
 
         # Initialize video capture and setup tkinter window
         self.cap = cv2.VideoCapture(self.filename)
+        self.fps = self.cap.get(cv2.CAP_PROP_FPS)
+
 
         # run the video through the algorithm
         self.start_time = time.time()
