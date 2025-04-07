@@ -1,5 +1,5 @@
 # TO DO #
-
+(4/7)
 - Sync red dot on plot with image display
 - Keep red dot static while secondary gray dot appears for mouse hover
 - Measurement graphs automatically update with hover ✅
