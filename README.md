@@ -17,4 +17,5 @@
 # UI Decisions #
 - Used densely dotted blue (#0072B2) and a orange (#E69F00) for colorblind visibility
 
+[Demo video](https://youtu.be/FekopEXXwtw)
 
