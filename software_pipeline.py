@@ -20,6 +20,7 @@ testGUI = True # true to show GUI, false to show dummy function
 
 """ Write Functions Here """ 
 
+""" CAN DELETE THIS FUNCTION"""
 def get_data_from_file(file_name, testing=False, saving=False):
 # Function that takes in a fileName and outputs an image or array of images
 # Input: 
@@ -106,11 +107,12 @@ def GUI_to_get_data(root, testing=False, saving=False):
     tracker.run()
 
     # save output file names
-    csv_file = tracker.csv_file
+    csv_file = tracker.get_csv_file()
     folder_with_images = tracker.get_output_dir()
+    NN_key = tracker.get_NN_key()
 
 
-    return csv_file, folder_with_images
+    return csv_file, folder_with_images, NN_key
 
 """ DELETE THIS FUNCTION """
 def isolate_eye_images(images, testing=False, saving=False):
@@ -205,8 +207,8 @@ def isolate_eye_images(images, testing=False, saving=False):
 
 
     return right_eye_images, left_eye_images
-""" DELETE THIS FUNCTION """
 
+""" DELETE THIS FUNCTION """
 def blur_and_sample(img, a=0.4):
     # Enter your code here
     
@@ -381,7 +383,6 @@ def change_resolution_frames(eye_images_folder, ideal_shape = [256,256], output_
     
     return(output_dir)
 
-
 def apply_ML_model(eye_data_filename, eye_images_folder):
 # Function that takes an array of images as an input, applies the ML model to each individual image/frame,
 # and outputs the resulting data as an array
@@ -443,15 +444,16 @@ if testOnlyGUI:
 root = tk.Tk()
 
 # collect video and output predicted measurements and frames for each eye
-csv_file, folder_with_images = GUI_to_get_data(root, testing=False,saving=True)
+csv_file, folder_with_images, NN_key = GUI_to_get_data(root, testing=False,saving=True)
 #updated_csv_file = None
 #folder_with_images = "./eye_tracking_output/"
 
 # Change the resolution of the image to match the resolution that the ML model expects
-folder_with_cropped_frames = change_resolution_frames(folder_with_images, saving=True, testing=False)
+if NN_key: # only perform these steps if using a new video file
+    folder_with_cropped_frames = change_resolution_frames(folder_with_images, saving=True, testing=False)
 
-# Put the images through the NN and get the output parameter predictions
-updated_csv_file = apply_ML_model(csv_file, folder_with_cropped_frames)
+    # Put the images through the NN and get the output parameter predictions
+    updated_csv_file = apply_ML_model(csv_file, folder_with_cropped_frames)
 
 # Plug data into GUI to display to the doctor
 display_GUI_from_data(root, folder_with_images)

@@ -35,8 +35,26 @@ class EyeTracker:
         self.measurements = []
         self.left_eye_frames = list()
         self.right_eye_frames = list()
+
+        # save constructor inputs
+        self.testing= testing
+        self.saving = saving
+
         
-        # Create a directory to save frames and measurements
+    def get_output_dir(self):
+        """return the output directory containing the images"""
+        return self.output_dir
+    
+    def get_csv_file(self):
+        """return the csv file with the measurements"""
+        return self.csv_file
+    
+    def get_NN_key(self):
+        """return the key for whether the NN needs to be run in the software pipeline"""
+        return self.NN_key
+    
+    def create_base_output_folder(self):
+                # Create a directory to save frames and measurements
         self.output_dir = "eye_tracking_output"
         os.makedirs(self.output_dir, exist_ok=True)
 
@@ -50,17 +68,9 @@ class EyeTracker:
                     shutil.rmtree(file_path)
             except Exception as e:
                 print(f"Failed to delete {file_path}. Reason: {e}")
+                
         # now ensure folder exists
         os.makedirs(self.output_dir, exist_ok=True)
-
-        # save constructor inputs
-        self.testing= testing
-        self.saving = saving
-
-        
-    def get_output_dir(self):
-        """return the output directory containing the images"""
-        return self.output_dir
     
     def calculate_distance(self, point1, point2):
         """Calculate Euclidean distance between two points"""
@@ -299,6 +309,7 @@ class EyeTracker:
         self.cap = cv2.VideoCapture(self.filename)
         self.cap.set(cv2.CAP_PROP_FPS, 30)
         self.fps = 30 # set frame rate
+        self.NN_key = True
         
         # Declare the width and height in variables 
         width, height = 800, 600
@@ -307,8 +318,11 @@ class EyeTracker:
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, width) 
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height) 
 
-
+        # set up other variables
+        self.create_base_output_folder()
         self.start_time = time.time()
+
+        # analyze and collect frames
         self.run_video()
 
     
@@ -329,12 +343,26 @@ class EyeTracker:
         # Initialize video capture and setup tkinter window
         self.cap = cv2.VideoCapture(self.filename)
         self.fps = self.cap.get(cv2.CAP_PROP_FPS)
-
+        self.NN_key = True
+        self.create_base_output_folder()
 
         # run the video through the algorithm
         self.start_time = time.time()
 
+        # analyze frames
         self.run_video()
+
+    def get_folder(self):
+        """Allow tkinter to let user choose a file."""
+        # open dialog allowing patient to choose folder path
+        self.output_dir = filedialog.askdirectory()
+
+        # Initialize key to prevent other processes from being run
+        self.NN_key = False
+        self.csv_file = None
+
+        self.cleanup()
+
 
 
     def cleanup(self):
@@ -343,7 +371,8 @@ class EyeTracker:
         for widget in self.app.grid_slaves():
             widget.destroy()
         self.app.quit()
-        self.cap.release()
+        if self.NN_key:
+            self.cap.release()
 
     
     def save_measurements(self):
@@ -364,6 +393,9 @@ class EyeTracker:
 
         button2 = tk.Button(self.app, text="Upload Video File", command=self.get_file)
         button2.grid()
+
+        button3 = tk.Button(self.app, text="Build GUI with Preprocessed Data", command=self.get_folder)
+        button3.grid()
 
         # start a counter to adjust the size of the window if its the first frame
         self.frame_number = 0
