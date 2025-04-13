@@ -22,15 +22,12 @@ if WANDB_FLAG:
 import eyespy_mpd_NN as eyespy_nn
 
 testing = True 
-usingClasses = True
 
 # Set source folder for images
 source_folder = input("Enter full path (folder) where the images are stored: ")
-# model_data_path = "/Users/mihirjoshi/Documents/OSU/2024-2025/Capstone/EyesPy/data/10-30-2024/model_data/subset/"
 
 # Create destination folder to store images
 destination_path = input("Enter full path (folder) where you want the Train/Test/Val Split Images to be stored: ")
-# model_data_path = "/Users/mihirjoshi/Documents/OSU/2024-2025/Capstone/EyesPy/data/10-30-2024/model_data/subset/"
 
 # Create the Train, Validation, and Test folders
 folders = ["Train", "Validation", "Test"]
@@ -47,7 +44,7 @@ random.shuffle(image_files)
 total_images = len(image_files)
 train_split = int(total_images * 0.7)  # 70% for training
 val_split = int(total_images * 0.2)   # 20% for validation
-# The remaining 15% will go to the test folder
+# The remaining 10% will go to the test folder
 
 # Distribute the images into the folders
 for i, image in enumerate(image_files):
@@ -76,15 +73,22 @@ val_label = 'Validation/'
 labels_path = input("Enter full path (excel file) where the filenames, labels, and measures are stored: ")
 df = pd.read_excel(labels_path)
 
-if testing: # print info about the number of images for each class
+# Make sure we have all required columns
+required_columns = ['filename', 'vpf', 'mrd1', 'vpf_expected', 'mrd1_expected']
+missing_columns = [col for col in required_columns if col not in df.columns]
+if missing_columns:
+    raise ValueError(f"Missing required columns in Excel file: {missing_columns}")
+
+if testing: # print info about the data
     print('Header (testing = True):')
-    df.head()
-    print('Open Classes:')
-    df[df['class'] == 'Open'].count()
-    print('Partial Classes:')
-    df[df['class'] == 'Partial'].count()
-    print('Closed Classes:')
-    df[df['class'] == 'Closed'].count()
+    print(df.head())
+    print(f"Total number of data points: {len(df)}")
+    print("\nStatistics for input features:")
+    print(f"VPF mean: {df['vpf'].mean():.2f}, std: {df['vpf'].std():.2f}")
+    print(f"MRD1 mean: {df['mrd1'].mean():.2f}, std: {df['mrd1'].std():.2f}")
+    print("\nStatistics for target values:")
+    print(f"VPF_expected mean: {df['vpf_expected'].mean():.2f}, std: {df['vpf_expected'].std():.2f}")
+    print(f"MRD1_expected mean: {df['mrd1_expected'].mean():.2f}, std: {df['mrd1_expected'].std():.2f}")
 
 # Create a transform to convert the images to PyTorch tensors
 transform = transforms.Compose([
@@ -95,57 +99,12 @@ transform = transforms.Compose([
 train_data = eyespy_nn.EyeDataset(data_path + train_label, df, transform=transform)
 val_data = eyespy_nn.EyeDataset(data_path + val_label, df, transform=transform)
 
-if testing: # print info about the number of images for each class
+if testing: # print info about datasets
     print('Number of images in the training dataset:', len(train_data))
     print('Number of images in the validation dataset:', len(val_data))
-    print(f'Shape of data: {train_data[0][1].shape}')
-
-
-# only do these steps if the excel tracking is still using classes... 
-if usingClasses:
-    # Convert class names to numbers {open: 0,  partial: 1, closed: 2}
-    unique_classes = df['class'].unique()
-    class_mapping = {cls: idx for idx, cls in enumerate(unique_classes)}
-
-    df['class'] = df['class'].map(class_mapping)
-    df.head()
-
-    if testing: # print num and percent of each class in both the test and training data sets
-        total_open = 0
-        total_partial = 0
-        total_closed = 0
-
-        for data_sample in train_data:
-            data_class = data_sample[2]
-
-            if data_class == 0:
-                total_open += 1
-
-            elif data_class == 1:
-                total_partial += 1
-
-            else:
-                total_closed += 1
-        print(f"TRAINING Totals: \n  Open: {total_open}\n  Partial: {total_partial}\n  Closed: {total_closed}")
-        print(f"TRAIN Percentages: \n  Open: {(total_open/len(train_data)) * 100:0.2f}%\n  Partial: {(total_partial / len(train_data)) * 100:0.2f}%\n  Closed: {(total_closed /len(train_data)) * 100:0.2f}%")
-
-        total_open = 0
-        total_partial = 0
-        total_closed = 0
-
-        for data_sample in val_data:
-            data_class = data_sample[2]
-
-            if data_class == 0:
-                total_open += 1
-
-            elif data_class == 1:
-                total_partial += 1
-
-            else:
-                total_closed += 1
-        print(f"VALIDATION Totals: \n  Open: {total_open}\n  Partial: {total_partial}\n  Closed: {total_closed}")
-        print(f"VAL Percentages: \n  Open: {(total_open/len(val_data)) * 100:0.2f}%\n  Partial: {(total_partial / len(val_data)) * 100:0.2f}%\n  Closed: {(total_closed / len(val_data)) * 100:0.2f}%")
+    if len(train_data) > 0:
+        print(f'Shape of data: {train_data[0][1].shape}')
+        print(f'Sample data: filename={train_data[0][0]}, vpf={train_data[0][2]}, mrd1={train_data[0][3]}, vpf_expected={train_data[0][4]}, mrd1_expected={train_data[0][5]}')
 
 # Check if images were loaded correctly
 dataset_correct = True
@@ -159,18 +118,29 @@ for img_idx in range(len(image_files)):
     index = img_idx
     curr_image = image_files[img_idx]
 
-    filename_matches = (df[df['filename'] == curr_image]['filename'] == train_data[img_idx][0]).item()
-    class_matches = (df[df['filename'] == curr_image]['class'] == train_data[img_idx][2]).item()
-    vpf_matches = (df[df['filename'] == curr_image]['vpf'] == train_data[img_idx][3]).item()
+    try:
+        # Check if filename matches
+        filename_matches = (df[df['filename'] == curr_image]['filename'] == train_data[img_idx][0]).item()
+        
+        # Check if other values match
+        vpf_matches = (df[df['filename'] == curr_image]['vpf'] == train_data[img_idx][2]).item()
+        mrd1_matches = (df[df['filename'] == curr_image]['mrd1'] == train_data[img_idx][3]).item()
+        vpf_expected_matches = (df[df['filename'] == curr_image]['vpf_expected'] == train_data[img_idx][4]).item()
+        mrd1_expected_matches = (df[df['filename'] == curr_image]['mrd1_expected'] == train_data[img_idx][5]).item()
 
-    if not(filename_matches & class_matches & vpf_matches):
+        if not(filename_matches & vpf_matches & mrd1_matches & vpf_expected_matches & mrd1_expected_matches):
+            dataset_correct = False
+            break
+    except (IndexError, KeyError) as e:
+        print(f"Error checking dataset at index {img_idx}, file {curr_image}: {e}")
         dataset_correct = False
         break
 
 if dataset_correct:
     print("Dataset created correctly!")
 else:
-    print(f"Uh oh :( the dataset was not correct at: {df.loc[index]}")
+    print(f"Uh oh :( the dataset was not correct at index: {index}, filename: {curr_image}")
+    print("Please verify that your Excel file has the correct columns and matches the image files.")
 
 
 """ DEFINE MODEL AND HYPERPARAMETERS """
@@ -181,7 +151,7 @@ device = torch.device("cpu") #torch.device("mps" if torch.backends.mps.is_availa
 num_epochs = 5
 batch_size = 1
 learning_rate = 0.001
-criterion = nn.MSELoss()
+criterion = nn.MSELoss()  # MSE loss is appropriate for regression tasks
 
 # initialize model
 model = eyespy_nn.ModifiedUNet().to(device)
@@ -198,9 +168,9 @@ if WANDB_FLAG:
         "learning_rate": learning_rate,
         "epochs": num_epochs,
         "batch_size": batch_size,
-        "loss": criterion,
+        "loss": "MSE",
         "dataset": labels_path, # assuming excel sheet is wellnamed... 
-        "architecture": "Modified UNet"
+        "architecture": "Modified UNet with dual output"
     }
     )
 
@@ -212,5 +182,6 @@ val_loader = eyespy_nn.create_loader(val_data, batch_size)
 eyespy_nn.training_and_validation(device, num_epochs, model, train_loader, val_loader, criterion, optimizer)
 
 # Save the model weights
-model_path = "model"
-torch.save(model.state_dict(), model_path + '/Modified_Unet_{num_epochs}_epochs.pth') 
+model_dir = "model"
+os.makedirs(model_dir, exist_ok=True)
+torch.save(model.state_dict(), os.path.join(model_dir, f'Modified_Unet_{num_epochs}_epochs.pth')) 

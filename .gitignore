@@ -13,3 +13,6 @@ test_output/
 wandb/
 
 Users/
+
+*.dat
+*.mov

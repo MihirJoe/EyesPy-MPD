@@ -44,14 +44,11 @@ class ModifiedUNet(nn.Module):
         self.gap = nn.AdaptiveAvgPool2d(1)
 
         # Fully connected layers for final output
-        self.fc1 = nn.Linear(2, 64)
-        self.fc2 = nn.Linear(64, 1)
+        self.fc1 = nn.Linear(3, 128)  # Changed from 4 to 3 to remove class_label input
+        self.fc2 = nn.Linear(128, 64)
+        self.fc3 = nn.Linear(64, 2)  # Output two values: vpf_predicted and mrd1_predicted
 
-    def forward(self, x, class_label):
-
-        # print(f"Input x device: {x.device}, dtype: {x.dtype}")
-        # print(f"class_label device: {class_label.device}, dtype: {class_label.dtype}")
-
+    def forward(self, x, vpf, mrd1):
         # Encoder
         x1 = self.inc(x)
         x2 = self.down1(x1)
@@ -82,17 +79,19 @@ class ModifiedUNet(nn.Module):
         x = self.gap(x)
         x = x.view(x.size(0), -1)
 
-        # Unsqueeze class_label to make it 2D
-        class_label = class_label.unsqueeze(1).float()
+        # Unsqueeze inputs to make them 2D if needed
+        vpf = vpf.unsqueeze(1).float()
+        mrd1 = mrd1.unsqueeze(1).float()
 
-        # Concatenate with class label
-        x = torch.cat([x, class_label], dim=1)
+        # Concatenate with vpf and mrd1
+        x = torch.cat([x, vpf, mrd1], dim=1)
 
         # Fully connected layers
         x = F.relu(self.fc1(x))
-        x = self.fc2(x)
+        x = F.relu(self.fc2(x))
+        x = self.fc3(x)
 
-        return x.squeeze()
+        return x  # Returns a tensor with 2 values: [vpf_predicted, mrd1_predicted]
 
     def double_conv(self, in_channels, out_channels):
         return nn.Sequential(
@@ -128,18 +127,13 @@ class EyeDataset(Dataset):
         all_files = [f for f in os.listdir(self.directory) if f.endswith(('.png', '.jpg', '.jpeg', '.tif', '.bmp'))]
         
         # Filter files that exist in both the directory and the dataframe
-        # print(f"Dataframe in EyeDataset Class: {self.dataframe}")
         valid_files = [f for f in all_files if f in self.dataframe['filename'].values]
-        #print(f"all_files: {all_files}")
-        #print(f"valid_files: {valid_files}")
-        #print(f"list from dataframe: {self.dataframe['filename'].values}")
         return valid_files
 
     def __len__(self):
         return len(self.filenames)
 
     def __getitem__(self, idx):
-        # print(f"idx: {idx} \nFilenames: {self.filenames}")
         filename = self.filenames[idx]
         img_path = os.path.join(self.directory, filename)
 
@@ -149,12 +143,13 @@ class EyeDataset(Dataset):
         # Load image
         image = self.__load_image(img_path)
 
-        # Get class, vpf, and mrd1 from dataframe
-        class_label = row['class']
+        # Get values from dataframe
         vpf = row['vpf']
         mrd1 = row['mrd1']
+        vpf_expected = row['vpf_expected']
+        mrd1_expected = row['mrd1_expected']
 
-        return filename, image, class_label, vpf, mrd1
+        return filename, image, vpf, mrd1, vpf_expected, mrd1_expected
     
     def __load_image(self, img_path):
         image = Image.open(img_path)
@@ -171,32 +166,39 @@ def train_epoch(device, model, loader, criterion, optimizer):
     running_loss = 0.0
     
     count = 0
-    for _, img, class_name, vpf, mrd1 in loader:
-
+    for _, img, vpf, mrd1, vpf_expected, mrd1_expected in loader:
         img = img.to(device=device, dtype=torch.float32)
-        # print(img.shape)
-        class_name = class_name.to(device=device, dtype=torch.float32)
-        # print(class_name.shape)
         
         if torch.backends.mps.is_available():
             # Pytorch only converts MPS tensors to float32
-            actual_vpf = vpf.to(device=device, dtype=torch.float32)
+            vpf = vpf.to(device=device, dtype=torch.float32)
+            mrd1 = mrd1.to(device=device, dtype=torch.float32)
+            vpf_expected = vpf_expected.to(device=device, dtype=torch.float32)
+            mrd1_expected = mrd1_expected.to(device=device, dtype=torch.float32)
         else:
-            actual_vpf = vpf.to(device).float()
+            vpf = vpf.to(device).float()
+            mrd1 = mrd1.to(device).float()
+            vpf_expected = vpf_expected.to(device).float()
+            mrd1_expected = mrd1_expected.to(device).float()
 
         optimizer.zero_grad()
-        output = model(img, class_name) # model vpf estimation
-        loss = criterion(output, actual_vpf) # calculate loss
+        
+        output = model(img, vpf, mrd1)  # Model outputs [vpf_predicted, mrd1_predicted]
+        
+        # Create target tensor with both expected values
+        targets = torch.stack([vpf_expected, mrd1_expected], dim=1)
+        
+        loss = criterion(output, targets)
         loss.backward()
         optimizer.step()
         running_loss += loss.item()
 
-    print(f"batch {count+1}")
-    count += 1
+        print(f"batch {count+1}")
+        count += 1
 
     curr_loss = running_loss / len(loader)
     if WANDB_FLAG:
-        wandb.log({"train_MSE":curr_loss})
+        wandb.log({"train_MSE": curr_loss})
     return curr_loss
 
 def create_loader(train_dataset, batch_size):
@@ -210,23 +212,32 @@ def validate(device, model, loader, criterion):
     model.eval()
     running_loss = 0.0
     with torch.no_grad():
-        for _, img, class_name, vpf in loader:
-
+        for _, img, vpf, mrd1, vpf_expected, mrd1_expected in loader:
             img = img.to(device=device, dtype=torch.float32)
-            class_name = class_name.to(device=device, dtype=torch.float32)
             
             if torch.backends.mps.is_available():
                 # Pytorch only converts MPS tensors to float32
-                actual_vpf = vpf.to(device=device, dtype=torch.float32)
+                vpf = vpf.to(device=device, dtype=torch.float32)
+                mrd1 = mrd1.to(device=device, dtype=torch.float32)
+                vpf_expected = vpf_expected.to(device=device, dtype=torch.float32)
+                mrd1_expected = mrd1_expected.to(device=device, dtype=torch.float32)
             else:
-                actual_vpf = vpf.to(device).float()
+                vpf = vpf.to(device).float()
+                mrd1 = mrd1.to(device).float()
+                vpf_expected = vpf_expected.to(device).float()
+                mrd1_expected = mrd1_expected.to(device).float()
             
-            output = model(img, class_name) # make vpf prediction
-            loss = criterion(output, actual_vpf) # calculate loss
+            output = model(img, vpf, mrd1)
+            
+            # Create target tensor
+            targets = torch.stack([vpf_expected, mrd1_expected], dim=1)
+            
+            loss = criterion(output, targets)
             running_loss += loss.item()
+        
         curr_loss = running_loss / len(loader)
         if WANDB_FLAG:
-            wandb.log({"train_MSE":curr_loss})
+            wandb.log({"val_MSE": curr_loss})
     return curr_loss
 
 def training_and_validation(device, num_epochs, model, train_loader, val_loader, criterion, optimizer):
