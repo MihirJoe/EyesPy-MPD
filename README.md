@@ -18,4 +18,5 @@
 
 # UI Decisions #
 - Used densely dotted blue (#0072B2) and a solid orange (#E69F00)
+  
   for colorblind visibility and clear distinction if printed
