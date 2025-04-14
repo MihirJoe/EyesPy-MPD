@@ -1,0 +1,15 @@
+avneesh_eye_images/avneesh_eye_images/
+avneesh_eye_output/
+avneesh_eye_images/
+cropped_eyes/
+examples_for_gui/
+eye_tracking_output/
+saved_frames/
+eye_tracking_output_20250414_120614/
+output_images/
+model/
+avneesh_blinking.mov
+partial_closed_output_images/
+test_output/
+wandb/
+*.dat
