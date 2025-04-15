@@ -37,14 +37,14 @@ class EyeTrackingGUI:
         self.frame_table_od.grid(row=0, column=0, padx=10)
 
         self.left_image_block = tk.Frame(self.frame_images)
-        self.left_image_block.grid(row=0, column=1, padx=10)
+        self.left_image_block.grid(row=0, column=2, padx=10)
         self.left_image_label = tk.Label(self.left_image_block)
         self.left_image_label.pack()
         self.left_filename_label = tk.Label(self.left_image_block, text="", font=("Arial", 10, "italic"))
         self.left_filename_label.pack()
 
         self.right_image_block = tk.Frame(self.frame_images)
-        self.right_image_block.grid(row=0, column=2, padx=10)
+        self.right_image_block.grid(row=0, column=1, padx=10)
         self.right_image_label = tk.Label(self.right_image_block)
         self.right_image_label.pack()
         self.right_filename_label = tk.Label(self.right_image_block, text="", font=("Arial", 10, "italic"))
@@ -252,3 +252,4 @@ if __name__ == "__main__":
         root.mainloop()
     else:
         print("No folder selected.")
+        

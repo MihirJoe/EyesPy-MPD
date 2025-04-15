@@ -42,14 +42,14 @@ class EyeTrackingGUI:
         self.next_button = tk.Button(self.button_frame, text="Next Pair ▶", command=self.load_next_pair)
         self.next_button.pack(side="right", padx=10)
 
-        self.frame_od = tk.Frame(root, width=400, height=300)
+        self.frame_od = tk.Frame(root, width=400, height=400)
         self.frame_od.grid(row=2, column=0, padx=10, pady=10)
-        self.frame_os = tk.Frame(root, width=400, height=300)
+        self.frame_os = tk.Frame(root, width=400, height=400)
         self.frame_os.grid(row=2, column=2, padx=10, pady=10)
         self.label_od = tk.Label(self.frame_od, text="OD (Right Eye)")
-        self.label_od.pack()
+        self.label_od.pack(fill='both')
         self.label_os = tk.Label(self.frame_os, text="OS (Left Eye)")
-        self.label_os.pack()
+        self.label_os.pack(fill='both')
 
         self.frame_reliability = tk.Frame(root, width=150, height=200)
         self.frame_reliability.grid(row=2, column=1, padx=10, pady=10)
@@ -133,16 +133,20 @@ class EyeTrackingGUI:
         left_image = Image.open(left_image_path)
         right_image = Image.open(right_image_path)
         
-        left_image = left_image.resize((400, 300), Image.Resampling.LANCZOS)
-        right_image = right_image.resize((400, 300), Image.Resampling.LANCZOS)
+        resized_left_image = left_image.resize((400, 400), Image.Resampling.LANCZOS)
+        resized_right_image = right_image.resize((400, 400), Image.Resampling.LANCZOS)
 
-        left_photo = ImageTk.PhotoImage(left_image)
-        right_photo = ImageTk.PhotoImage(right_image)
+        left_photo = ImageTk.PhotoImage(image=resized_left_image)
+        right_photo = ImageTk.PhotoImage(image=resized_right_image)
 
-        self.label_od.config(image=right_photo)
-        self.label_od.image = right_photo
-        self.label_os.config(image=left_photo)
-        self.label_os.image = left_photo
+        self.label_od.right_photo = right_photo
+        self.label_od.configure(image=right_photo)
+        self.label_os.image = left_photo       
+        self.label_os.configure(image=left_photo)
+
+        self.label_os.pack(expand=True, fill='both')
+        self.label_od.pack(expand=True, fill='both')
+
 
         self.label_filename.config(text=f"File: {left_image_file} & {right_image_file}")
 
@@ -159,10 +163,7 @@ class EyeTrackingGUI:
         self.canvas.get_tk_widget().pack()
 
 if __name__ == "__main__":
-    root1 = tk.Tk()
-    root2 = tk.Tk()
-    root1.mainloop()
-    root2.mainloop()
+    
     root = tk.Tk(baseName="GUI")
     app = EyeTrackingGUI(root)
     root.mainloop()
