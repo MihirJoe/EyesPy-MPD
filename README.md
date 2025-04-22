@@ -25,21 +25,21 @@ The iris is a crucial biometric feature with applications in identity verificati
 
 **Input Image:**
 
-![Input Image 1](images_for_readme/example1_input.png)
+<img src="./images_for_readme/example1_input.png" alt="Input Image 1" width="500"/>
 
 **Result with Iris Detection:**
 
-![Output Image 1](images_for_readme/example1_viz.png)
+<img src="./images_for_readme/example1_viz.png" alt="Output Image 1" width="500"/>
 
 ### Example 2: Close-up Iris Detection
 
 **Input Image:**
 
-![Input Image 2](images_for_readme/example2_input.png)
+<img src="./images_for_readme/example2_input.png" alt="Input Image 2" width="500"/>
 
 **Result with Iris Detection:**
 
-![Output Image 2](images_for_readme/example2_viz.png)
+<img src="./images_for_readme/example2_viz.png" alt="Output Image 2" width="500"/>
 
 ## How It Works
 
