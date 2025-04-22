@@ -21,25 +21,44 @@ The iris is a crucial biometric feature with applications in identity verificati
 
 ## Examples
 
-### Example 1: Iris Segmentation
+### Example 1: Iris Segmentation - Subject 1 (Mihir)
 
 **Input Image:**
 
-<img src="./images_for_readme/example1_input.png" alt="Input Image 1" width="500"/>
+<img src="./images_for_readme/mihir/input_image.png" alt="Input Image - Mihir" width="500"/>
 
 **Result with Iris Detection:**
 
-<img src="./images_for_readme/example1_viz.png" alt="Output Image 1" width="500"/>
+<img src="./images_for_readme/mihir/right_eye_visualization.png" alt="Output Image - Mihir" width="500"/>
 
-### Example 2: Close-up Iris Detection
+**Segmentation Mask:**
+
+<img src="./images_for_readme/mihir/right_eye_iris_mask.png" alt="Iris Mask - Mihir" width="200"/>
+
+### Example 2: Iris Segmentation - Subject 2 (Avneesh)
 
 **Input Image:**
 
-<img src="./images_for_readme/example2_input.png" alt="Input Image 2" width="500"/>
+<img src="./images_for_readme/avneesh/input_image.png" alt="Input Image - Avneesh" width="500"/>
 
 **Result with Iris Detection:**
 
-<img src="./images_for_readme/example2_viz.png" alt="Output Image 2" width="500"/>
+<img src="./images_for_readme/avneesh/right_eye_visualization.png" alt="Output Image - Avneesh" width="500"/>
+
+**Segmentation Mask:**
+
+<img src="./images_for_readme/avneesh/right_eye_iris_mask.png" alt="Iris Mask - Avneesh" width="200"/>
+
+## Cross-Subject Performance
+
+As shown in the examples above, EyesPy can accurately detect and measure irises across different subjects with varying eye characteristics:
+
+- Different iris colors
+- Varying eye shapes
+- Different lighting conditions
+- Various image capture angles
+
+The system uses a combination of traditional computer vision techniques and advanced deep learning methods to ensure robust performance across diverse subjects.
 
 ## How It Works
 

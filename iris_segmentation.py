@@ -291,20 +291,19 @@ class IrisSegmentor:
             return None, None, None, False
         try:
             h, w = eye_image.shape[:2]
-            iris_circle = detect_iris_center_and_radius(eye_image)
-            if iris_circle is None:
-                print("No iris detected")
-                return None, None, None, False
-            center_x, center_y, radius = iris_circle
-            pad = int(radius * 1.6)
-            x1 = max(center_x - pad, 0)
-            y1 = max(center_y - pad, 0)
-            x2 = min(center_x + pad, w)
-            y2 = min(center_y + pad, h)
+            # Center the SAM bounding box at the darkest region (red dot)
+            center_x, center_y = find_dark_region_center(eye_image)
+            radius = eye_image.shape[0] // 4  # Approximate iris radius as 1/4 of eye height
+            pad_x = int(radius * 1.2)
+            pad_y = int(radius * 1.6)
+            x1 = max(center_x - pad_x, 0)
+            y1 = max(center_y - pad_y, 0)
+            x2 = min(center_x + pad_x, w)
+            y2 = min(center_y + pad_y, h)
             bbox = np.array([x1, y1, x2, y2])
 
             # Define a point prompt at the darkest region
-            center_px, center_py = find_dark_region_center(eye_image)
+            center_px, center_py = center_x, center_y
             point_coords = np.array([[center_px, center_py]])
             point_labels = np.array([1])  # 1 = foreground
 
@@ -319,11 +318,10 @@ class IrisSegmentor:
             rgb_image = cv2.cvtColor(eye_image, cv2.COLOR_BGR2RGB)
             self.sam_predictor.set_image(rgb_image)
 
-            # SAM demo-style: use both box and point prompt, multimask_output=True
+            # SAM: use only point prompt, no bounding box, multimask_output=True
             masks, scores, _ = self.sam_predictor.predict(
                 point_coords=point_coords,
                 point_labels=point_labels,
-                box=bbox[np.newaxis, :],
                 multimask_output=True
             )
             gray_eye = cv2.cvtColor(eye_image, cv2.COLOR_BGR2GRAY)
@@ -367,21 +365,33 @@ class IrisSegmentor:
                 cy = int(M["m01"] / M["m00"])
                 center_dist = np.linalg.norm(image_center - np.array([cx, cy]))
 
+                # Compute prompt_dist: distance from mask centroid to red prompt
+                prompt_dist = np.linalg.norm(np.array([center_px, center_py]) - np.array([cx, cy]))
+
                 area = cv2.contourArea(largest)
                 perimeter = cv2.arcLength(largest, True)
                 circularity = 0
                 if perimeter > 0:
                     circularity = 4 * np.pi * (area / (perimeter * perimeter))
 
-                if area < 300 or area > (0.5 * h * w):
+                # Updated minimum area threshold: skip if area < 500 or area > (0.5 * h * w)
+                if area < 500 or area > (0.5 * h * w):
                     continue
 
                 # Sharpness (variance of Laplacian)
                 laplacian = cv2.Laplacian(gray_eye, cv2.CV_64F)
                 sharpness = np.var(laplacian[banded_mask > 0])
 
-                # Modified score calculation
-                score = 0.5 * mean_gray + 0.3 * center_dist + 50 * abs(circularity - 1) - 0.1 * sharpness
+                # Modified score calculation (increased mean_gray weight, add prompt_dist)
+                score = 1.0 * mean_gray + 0.3 * center_dist + 50 * abs(circularity - 1) - 0.1 * sharpness + 0.4 * prompt_dist
+
+                # Elliptical fit: compute eccentricity and apply penalty
+                if len(largest) >= 5:
+                    ellipse = cv2.fitEllipse(largest)
+                    (center, (major, minor), angle) = ellipse
+                    if major > 0 and minor > 0:
+                        eccentricity = np.sqrt(max(0, 1 - (minor / major)**2))
+                        score += 50 * eccentricity
 
                 if score < best_score:
                     best_score = score
@@ -476,6 +486,19 @@ class IrisSegmentor:
                     vis_filename = os.path.join(self.output_dir, f"{eye_key}_visualization.png")
                     cv2.imwrite(vis_filename, blended)
                     results[eye_key]['visualization_path'] = vis_filename
+
+        # Select the eye with a valid diameter and best mask
+        best_eye = None
+        for eye_key in eye_keys:
+            if 'diameter' in results[eye_key] and results[eye_key]['diameter'] is not None:
+                best_eye = eye_key
+                break  # Prioritize left eye if both exist
+
+        # Clear results for the other eye
+        for eye_key in eye_keys:
+            if eye_key != best_eye:
+                results.pop(eye_key, None)
+
         return results
 
 # -------------------- Main Entrypoint --------------------
