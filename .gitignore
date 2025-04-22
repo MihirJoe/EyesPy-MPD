@@ -7,3 +7,8 @@ partial_closed_output_images/
 saved_frames/
 test_output/
 wandb/
+
+avneesh_blinking.mov
+*.pth
+*.dat
+*.png

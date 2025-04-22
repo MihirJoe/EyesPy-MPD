@@ -7,6 +7,7 @@ import numpy as np
 from PIL import Image, ImageTk
 import os
 import random
+import pandas as pd
 
 matplotlib.use("TkAgg")  # Ensure Matplotlib integrates with Tkinter
 
@@ -32,7 +33,7 @@ class ScrollableFrame(ttk.Frame):
         scrollbar.pack(side="right", fill="y")
 
 class EyeTrackingGUI:
-    def __init__(self, root, image_folder="./eye_tracking_output/", data_file = None): # Aditi's folder: "/Users/aditi/Desktop/MPD/EyesPy-MPD/examples_for_gui"
+    def __init__(self, root, image_folder="./eye_tracking_output/", data_file=None): # Aditi's folder: "/Users/aditi/Desktop/MPD/EyesPy-MPD/examples_for_gui"
         print("Initializing GUI")  # Debugging
         self.root = root
         self.root.title("Eye Tracking GUI")
@@ -80,6 +81,23 @@ class EyeTrackingGUI:
             self.image_folder = self.image_folder + os.path.sep
             
         self.data_file = data_file
+        
+        # Flag to track if we have calibrated measurements (in mm)
+        self.is_calibrated = False
+        self.measurements_unit = "px"  # Default is pixels
+        if data_file and os.path.exists(data_file):
+            try:
+                self.measurements_df = pd.read_csv(data_file)
+                # Check if the data includes calibration information
+                if 'is_calibrated' in self.measurements_df.columns:
+                    # Use the most recent calibration status
+                    self.is_calibrated = bool(self.measurements_df['is_calibrated'].iloc[-1])
+                    self.measurements_unit = "mm" if self.is_calibrated else "px"
+            except Exception as e:
+                print(f"Error loading measurements file: {e}")
+                self.measurements_df = None
+        else:
+            self.measurements_df = None
 
         # Load Image Pairs
         self.image_pairs = self.get_eye_image_pairs()
@@ -104,6 +122,15 @@ class EyeTrackingGUI:
         self.frame_top.grid(row=0, column=0, columnspan=3, pady=5, sticky="ew")
         self.label_filename = tk.Label(self.frame_top, text="File: No image loaded", font=("Arial", 11, "bold"))
         self.label_filename.pack()
+        
+        # Add calibration status indicator
+        self.label_calibration = tk.Label(
+            self.frame_top, 
+            text=f"Measurements: {'Calibrated (mm)' if self.is_calibrated else 'Uncalibrated (px)'}", 
+            font=("Arial", 10), 
+            fg="blue"
+        )
+        self.label_calibration.pack()
 
         self.button_frame = tk.Frame(content_frame)
         self.button_frame.grid(row=1, column=0, columnspan=3, pady=2, sticky="ew")
@@ -134,7 +161,11 @@ class EyeTrackingGUI:
         # Center reliability frame
         self.frame_reliability = tk.Frame(content_frame)
         self.frame_reliability.grid(row=2, column=1, padx=5, pady=5, sticky="nsew")
-        self.label_reliability = tk.Label(self.frame_reliability, text="Reliability\nOD: -- %\nOS: -- %", font=("Arial", 11, "bold"))
+        self.label_reliability = tk.Label(
+            self.frame_reliability, 
+            text=f"Reliability\nOD: -- %\nOS: -- %\nUnit: {self.measurements_unit}", 
+            font=("Arial", 11, "bold")
+        )
         self.label_reliability.pack(expand=True)
 
         # Reduced height for graph
@@ -207,19 +238,71 @@ class EyeTrackingGUI:
         return list(pairs.values()) 
 
     def populate_tables(self):
-        """Populates measurement tables with random values."""
-        print("Populating tables...")  
-        cols = ["Measure", "Value"]  # Shorter column header
-        data = ["VPF", "HPF", "MRD1", "Blink", "Lid"]  # Shorter labels
-        values = {key: round(random.uniform(0.1, 1.0), 2) for key in data}
+        """Populates measurement tables with values from CSV file or random values if no file."""
+        print("Populating tables...")
+        
+        # Define columns and default data
+        cols = ["Measure", "Value"]
+        data = ["VPF", "HPF", "MRD1", "Blink", "Lid"]
+        
+        # If we have measurements from a CSV file, use those
+        if self.measurements_df is not None and not self.measurements_df.empty:
+            try:
+                # Get the most recent measurement
+                latest = self.measurements_df.iloc[-1]
+                
+                # Extract values
+                left_values = {
+                    "VPF": latest.get("left_vph", latest.get("left_palpebral_height", 0)),
+                    "MRD1": latest.get("left_mrd1", latest.get("left_pupil_to_lower", 0)),
+                    "HPF": round(random.uniform(0.1, 1.0), 2),  # Still random for now
+                    "Blink": round(random.uniform(0.1, 1.0), 2),
+                    "Lid": round(random.uniform(0.1, 1.0), 2)
+                }
+                
+                right_values = {
+                    "VPF": latest.get("right_vph", latest.get("right_palpebral_height", 0)),
+                    "MRD1": latest.get("right_mrd1", latest.get("right_pupil_to_lower", 0)),
+                    "HPF": round(random.uniform(0.1, 1.0), 2),  # Still random for now
+                    "Blink": round(random.uniform(0.1, 1.0), 2),
+                    "Lid": round(random.uniform(0.1, 1.0), 2)
+                }
+            except Exception as e:
+                print(f"Error extracting measurements from CSV: {e}")
+                # Fall back to random values
+                left_values = {key: round(random.uniform(0.1, 1.0), 2) for key in data}
+                right_values = {key: round(random.uniform(0.1, 1.0), 2) for key in data}
+        else:
+            # Generate random values if no CSV
+            left_values = {key: round(random.uniform(0.1, 1.0), 2) for key in data}
+            right_values = {key: round(random.uniform(0.1, 1.0), 2) for key in data}
 
-        for frame in [self.frame_table_od, self.frame_table_os]:
-            for i, text in enumerate(cols):
-                tk.Label(frame, text=text, relief=tk.RIDGE, width=8, font=("Arial", 9, "bold")).grid(row=0, column=i)  # Reduced width and font size
+        # Update unit in measurements
+        unit = "mm" if self.is_calibrated else "px"
+        
+        # Clear existing tables
+        for widget in self.frame_table_od.winfo_children():
+            widget.destroy()
+        for widget in self.frame_table_os.winfo_children():
+            widget.destroy()
+            
+        # Populate table for right eye (OD)
+        for i, text in enumerate(cols):
+            tk.Label(self.frame_table_od, text=text, relief=tk.RIDGE, width=8, font=("Arial", 9, "bold")).grid(row=0, column=i)
 
-            for i, key in enumerate(data):
-                tk.Label(frame, text=key, relief=tk.RIDGE, width=8).grid(row=i + 1, column=0)  # Reduced width
-                tk.Label(frame, text=str(values[key]), relief=tk.RIDGE, width=8).grid(row=i + 1, column=1)  # Reduced width
+        for i, key in enumerate(data):
+            tk.Label(self.frame_table_od, text=key, relief=tk.RIDGE, width=8).grid(row=i + 1, column=0)
+            value_text = f"{right_values[key]:.2f}" + (f" {unit}" if key in ["VPF", "MRD1"] else "")
+            tk.Label(self.frame_table_od, text=value_text, relief=tk.RIDGE, width=12).grid(row=i + 1, column=1)
+
+        # Populate table for left eye (OS)
+        for i, text in enumerate(cols):
+            tk.Label(self.frame_table_os, text=text, relief=tk.RIDGE, width=8, font=("Arial", 9, "bold")).grid(row=0, column=i)
+
+        for i, key in enumerate(data):
+            tk.Label(self.frame_table_os, text=key, relief=tk.RIDGE, width=8).grid(row=i + 1, column=0)
+            value_text = f"{left_values[key]:.2f}" + (f" {unit}" if key in ["VPF", "MRD1"] else "")
+            tk.Label(self.frame_table_os, text=value_text, relief=tk.RIDGE, width=12).grid(row=i + 1, column=1)
 
     def load_previous_pair(self):
         """Loads the previous image pair."""
@@ -298,7 +381,7 @@ class EyeTrackingGUI:
         self.line_os, = self.ax.plot([], [], label="OS", color="blue")  # Shorter label
         self.line_od, = self.ax.plot([], [], label="OD", color="green")  # Shorter label
         self.ax.set_xlabel("Time", fontsize=8)  # Smaller font
-        self.ax.set_ylabel("VPF", fontsize=8)  # Smaller font
+        self.ax.set_ylabel(f"VPF ({self.measurements_unit})", fontsize=8)  # Smaller font, with units
         self.ax.tick_params(axis='both', which='major', labelsize=7)  # Smaller tick labels
         self.ax.legend(loc='upper right', fontsize='x-small')  # Even smaller legend
         self.fig.tight_layout()  # Optimize layout

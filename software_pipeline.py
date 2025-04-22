@@ -1,4 +1,3 @@
-
 """ Import Libraries Here """
 import os
 import cv2
@@ -90,12 +89,13 @@ def get_data_from_file(file_name, testing=False, saving=False):
 
     return images
 
-def GUI_to_get_data(testing=False, saving=False):
+def GUI_to_get_data(testing=True, saving=False, use_calibration=True):
 # Function that displays a GUI the patient interacts with to collect an image/video from a file OR via live feed from the camera. 
 # The function then uses the EyeTracker class to collect predicted measurements and isolated frames of each eye for the image. 
 # Input: 
 #   Saving - Saves each frame as a file if true
 #   Testing - Prints helpful outputs
+#   use_calibration - Whether to use the SAM model for millimeter calibration
 # Output: 
 #   right_eye_measurements: list of dictionaries of eye measurements for each frame for the right eye (VPH, MRD1)
 #   left_eye_measurements: list of dictionaries of eye measurements for each frame for the left eye (VPH, MRD1)
@@ -112,11 +112,11 @@ def GUI_to_get_data(testing=False, saving=False):
     if choice == '1': # live video collection
         print("Starting eye tracking for live video...")
         print("Press 'q' to quit early")
-        tracker = EyeTracker(0, saving=saving)
+        tracker = EyeTracker(0, saving=saving, testing=testing, use_calibration=use_calibration)
         csv_file = tracker.run(duration=20)
     elif choice == '2': # file video collection
         video_path = input("Enter the path to the video file: ")
-        tracker = EyeTracker(video_path, saving=saving)
+        tracker = EyeTracker(video_path, saving=saving, testing=testing, use_calibration=use_calibration)
         csv_file = tracker.run()
     else:
         print("Invalid choice. Exiting.")
@@ -435,7 +435,7 @@ def display_GUI_from_data(eye_data_filename, eye_images_folder):
 # Recommended: file_name = './Rachel_120fps_1080p.mov'
 
 # collect video and output predicted measurements and frames for each eye
-csv_file, folder_with_images = GUI_to_get_data(testing=False,saving=True)
+csv_file, folder_with_images = GUI_to_get_data(testing=True, saving=True, use_calibration=True)
 
 # testing if this is working
 # plt.imshow(base_images[1,:])
