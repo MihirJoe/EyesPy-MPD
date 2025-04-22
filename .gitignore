@@ -1,0 +1,9 @@
+cropped_eyes/
+examples_for_gui/
+eye_tracking_output/
+model/
+output_images/
+partial_closed_output_images/
+saved_frames/
+test_output/
+wandb/
