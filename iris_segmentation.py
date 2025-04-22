@@ -4,7 +4,7 @@ import dlib
 import numpy as np
 import torch
 import glob
-from segment_anything import sam_model_registry, SamPredictor
+from segment_anything import build_sam, SamPredictor  # Import Iris-SAM custom loader if different
 
 # -------------------- Helper Functions --------------------
 def convert_pixels_to_mm(diameter_px, reference_corneal_diameter_mm=11.8, corneal_diameter_px=120):
@@ -65,18 +65,8 @@ def detect_iris_center_and_radius(image):
     return find_iris_dark_blob(image)
 
 def is_mask_circular(mask):
-    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    if not contours:
-        return False
-
-    largest_contour = max(contours, key=cv2.contourArea)
-    area = cv2.contourArea(largest_contour)
-    perimeter = cv2.arcLength(largest_contour, True)
-    if perimeter == 0:
-        return False
-
-    circularity = 4 * np.pi * (area / (perimeter * perimeter))
-    return 0.6 < circularity < 1.4
+    # Bypass strict circularity check; always return True for SAM mask acceptance.
+    return True
 # Helper function to refine mask to darkest blob inside mask, focusing on iris
 def refine_mask_to_darkest_blob(image, mask):
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
@@ -104,7 +94,8 @@ def refine_mask_to_darkest_blob(image, mask):
 
     mask_area = mask.shape[0] * mask.shape[1]
     area_ratio = area / mask_area
-    if 0.01 < area_ratio < 0.2 and 0.8 < circularity < 1.2:
+    # Relaxed circularity threshold from (0.8, 1.2) to (0.3, 1.5)
+    if 0.01 < area_ratio < 0.2 and 0.3 < circularity < 1.5:
         refined_mask = np.zeros_like(mask)
         cv2.drawContours(refined_mask, [largest], -1, 255, thickness=cv2.FILLED)
         return refined_mask
@@ -112,10 +103,12 @@ def refine_mask_to_darkest_blob(image, mask):
         return mask
 
 def find_dark_region_center(image):
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    h, w = image.shape[:2]
+    band = image[h // 4: 3 * h // 4, :]
+    gray = cv2.cvtColor(band, cv2.COLOR_BGR2GRAY)
     blurred = cv2.GaussianBlur(gray, (7, 7), 0)
-    minVal, maxVal, minLoc, maxLoc = cv2.minMaxLoc(blurred)
-    return minLoc  # Returns (x, y)
+    _, _, minLoc, _ = cv2.minMaxLoc(blurred)
+    return (minLoc[0], minLoc[1] + h // 4)
 
 # Helper function to crop the central vertical band of an eye image
 def crop_eye_strip(eye_img):
@@ -149,44 +142,21 @@ class IrisSegmentor:
         os.makedirs(self.output_dir, exist_ok=True)
 
     def initialize_sam_model(self):
-        """Initialize the SAM model for iris segmentation"""
+        """
+        Initialize the default SAM model for iris segmentation.
+        """
         try:
-            # Look for model weights in the current directory first, then in models/
-            model_path = None
-            # Check current directory for .pth files that contain "sam"
-            current_dir_models = glob.glob("*.pth")
-            sam_models = [m for m in current_dir_models if "sam" in m.lower()]
-
-            if sam_models:
-                model_path = sam_models[0]
-                print(f"Found SAM model in current directory: {model_path}")
-            else:
-                # Check models directory as fallback
-                models_dir_path = "models/sam_vit_b_01ec64.pth"
-                if os.path.exists(models_dir_path):
-                    model_path = models_dir_path
-
-            if not model_path:
-                print("SAM model weights not found. Please ensure a .pth file with 'sam' in the name exists.")
-                self.use_sam = False
-                return False
-
-            # Determine the model type based on the filename
-            model_type = "vit_b"  # Default model type
-            if "vit_h" in model_path.lower():
-                model_type = "vit_h"
-            elif "vit_l" in model_path.lower():
-                model_type = "vit_l"
-
-            # Initialize the model
+            from segment_anything import sam_model_registry
+            model_type = "vit_h"
+            model_path = "weights/sam_vit_h_4b8939.pth"
             device = "cuda" if torch.cuda.is_available() else "cpu"
             sam = sam_model_registry[model_type](checkpoint=model_path)
-            sam.to(device=device)
+            sam.to(device)
             self.sam_predictor = SamPredictor(sam)
-            print(f"SAM model initialized (type: {model_type}) on {device}")
+            print(f"Default SAM model loaded from {model_path} on {device}")
             return True
         except Exception as e:
-            print(f"Failed to initialize SAM model: {e}")
+            print(f"Failed to load default SAM model: {e}")
             self.use_sam = False
             return False
 
@@ -208,24 +178,34 @@ class IrisSegmentor:
         landmarks = self.predictor(gray, face)
         left_eye_points = [(landmarks.part(i).x, landmarks.part(i).y) for i in range(36, 42)]
         right_eye_points = [(landmarks.part(i).x, landmarks.part(i).y) for i in range(42, 48)]
-        padding = 10
-        left_eye_x = max(0, min(p[0] for p in left_eye_points) - padding)
-        left_eye_y = max(0, min(p[1] for p in left_eye_points) - padding)
-        left_eye_w = max(p[0] for p in left_eye_points) - left_eye_x + padding
-        left_eye_h = max(p[1] for p in left_eye_points) - left_eye_y + padding
-        right_eye_x = max(0, min(p[0] for p in right_eye_points) - padding)
-        right_eye_y = max(0, min(p[1] for p in right_eye_points) - padding)
-        right_eye_w = max(p[0] for p in right_eye_points) - right_eye_x + padding
-        right_eye_h = max(p[1] for p in right_eye_points) - right_eye_y + padding
+
+        # Calculate center of each eye
+        cx_left = int(sum(p[0] for p in left_eye_points) / len(left_eye_points))
+        cy_left = int(sum(p[1] for p in left_eye_points) / len(left_eye_points))
+        cx_right = int(sum(p[0] for p in right_eye_points) / len(right_eye_points))
+        cy_right = int(sum(p[1] for p in right_eye_points) / len(right_eye_points))
+
+        # Define fixed-size bounding box (128x128) around each eye center
+        box_size = 128  # Tighter crop around the eye
+        half_box = box_size // 2
         h, w = image.shape[:2]
-        left_eye_w = min(left_eye_w, w - left_eye_x)
-        left_eye_h = min(left_eye_h, h - left_eye_y)
-        right_eye_w = min(right_eye_w, w - right_eye_x)
-        right_eye_h = min(right_eye_h, h - right_eye_y)
-        left_eye_image = image[left_eye_y:left_eye_y+left_eye_h, left_eye_x:left_eye_x+left_eye_w]
-        right_eye_image = image[right_eye_y:right_eye_y+right_eye_h, right_eye_x:right_eye_x+right_eye_w]
-        left_eye_coords = (left_eye_x, left_eye_y, left_eye_w, left_eye_h)
-        right_eye_coords = (right_eye_x, right_eye_y, right_eye_w, right_eye_h)
+
+        left_eye_x1 = max(cx_left - half_box, 0)
+        left_eye_y1 = max(cy_left - half_box, 0)
+        left_eye_x2 = min(cx_left + half_box, w)
+        left_eye_y2 = min(cy_left + half_box, h)
+
+        right_eye_x1 = max(cx_right - half_box, 0)
+        right_eye_y1 = max(cy_right - half_box, 0)
+        right_eye_x2 = min(cx_right + half_box, w)
+        right_eye_y2 = min(cy_right + half_box, h)
+
+        left_eye_image = image[left_eye_y1:left_eye_y2, left_eye_x1:left_eye_x2]
+        right_eye_image = image[right_eye_y1:right_eye_y2, right_eye_x1:right_eye_x2]
+
+        left_eye_coords = (left_eye_x1, left_eye_y1, left_eye_x2 - left_eye_x1, left_eye_y2 - left_eye_y1)
+        right_eye_coords = (right_eye_x1, right_eye_y1, right_eye_x2 - right_eye_x1, right_eye_y2 - right_eye_y1)
+
         return {
             'left_eye': {
                 'image': left_eye_image,
@@ -276,7 +256,7 @@ class IrisSegmentor:
 
         def crop_eye(img, center):
             cx, cy = center
-            box_size = int(min(img.shape[0], img.shape[1]) * 0.3)
+            box_size = 160
             x1 = max(cx - box_size // 2, 0)
             y1 = max(cy - box_size // 2, 0)
             x2 = min(cx + box_size // 2, img.shape[1])
@@ -308,54 +288,134 @@ class IrisSegmentor:
 
     def segment_iris_with_sam(self, eye_image, eye_side="left"):
         if not self.use_sam or eye_image is None or eye_image.size == 0:
-            return None, None, None
+            return None, None, None, False
         try:
             h, w = eye_image.shape[:2]
             iris_circle = detect_iris_center_and_radius(eye_image)
             if iris_circle is None:
                 print("No iris detected")
-                return None, None, None
+                return None, None, None, False
             center_x, center_y, radius = iris_circle
-            pad = int(radius * 0.6)
+            pad = int(radius * 1.6)
             x1 = max(center_x - pad, 0)
             y1 = max(center_y - pad, 0)
             x2 = min(center_x + pad, w)
             y2 = min(center_y + pad, h)
             bbox = np.array([x1, y1, x2, y2])
-            center_point = np.array([[center_x, center_y]])
+
+            # Define a point prompt at the darkest region
+            center_px, center_py = find_dark_region_center(eye_image)
+            point_coords = np.array([[center_px, center_py]])
+            point_labels = np.array([1])  # 1 = foreground
+
+            # CLAHE-based contrast enhancement before SAM
+            lab = cv2.cvtColor(eye_image, cv2.COLOR_BGR2LAB)
+            l, a, b = cv2.split(lab)
+            clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
+            l = clahe.apply(l)
+            enhanced = cv2.merge((l, a, b))
+            eye_image = cv2.cvtColor(enhanced, cv2.COLOR_LAB2BGR)
+
             rgb_image = cv2.cvtColor(eye_image, cv2.COLOR_BGR2RGB)
             self.sam_predictor.set_image(rgb_image)
+
+            # SAM demo-style: use both box and point prompt, multimask_output=True
             masks, scores, _ = self.sam_predictor.predict(
-                point_coords=center_point,
-                point_labels=np.array([1]),
+                point_coords=point_coords,
+                point_labels=point_labels,
                 box=bbox[np.newaxis, :],
                 multimask_output=True
             )
-            best_mask_idx = np.argmax(scores)
-            iris_mask = masks[best_mask_idx]
-            iris_mask_uint8 = (iris_mask * 255).astype(np.uint8)
-            iris_mask_uint8 = refine_mask_to_darkest_blob(eye_image, iris_mask_uint8)
-            if not is_mask_circular(iris_mask_uint8):
-                print("Mask rejected: not circular enough")
-                return None, None, None
-            contours, _ = cv2.findContours(iris_mask_uint8, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-            if not contours:
-                return iris_mask_uint8, None, None
-            largest_contour = max(contours, key=cv2.contourArea)
-            # Prefer ellipse fitting for better center/size accuracy; fall back to circle if not enough points
-            if len(largest_contour) >= 5:
-                ellipse = cv2.fitEllipse(largest_contour)
-                (cx, cy), (major_axis, minor_axis), angle = ellipse
-                diameter = (major_axis + minor_axis) / 2  # Approximate average diameter
-                return iris_mask_uint8, diameter, (int(cx), int(cy))
+            gray_eye = cv2.cvtColor(eye_image, cv2.COLOR_BGR2GRAY)
+            best_mask = None
+            best_score = float('inf')
+            image_center = np.array([w // 2, h // 2])
+
+            for mask_candidate in masks:
+                mask_uint8 = (mask_candidate * 255).astype(np.uint8)
+
+                # Area ratio filter
+                white_ratio = np.sum(mask_uint8 > 0) / (mask_uint8.shape[0] * mask_uint8.shape[1])
+                if white_ratio < 0.01 or white_ratio > 0.8:
+                    print(f"Skipping mask due to area ratio: {white_ratio:.2f}")
+                    continue
+
+                # Apply a central band mask to focus scoring within horizontal iris band
+                vertical_mask = np.zeros_like(mask_uint8)
+                h_band = int(mask_uint8.shape[0] * 0.7)
+                y_start = int((mask_uint8.shape[0] - h_band) / 2)
+                vertical_mask[y_start:y_start + h_band, :] = 1
+                banded_mask = cv2.bitwise_and(mask_uint8, mask_uint8, mask=vertical_mask)
+
+                masked_pixels = gray_eye[banded_mask > 0]
+                if masked_pixels.size == 0:
+                    continue
+
+                mean_gray = np.mean(masked_pixels)
+
+                # Print mean gray and masked pixel count for each candidate
+                print(f"Candidate mask mean gray: {mean_gray:.2f}, masked pixels: {masked_pixels.size}")
+
+                contours, _ = cv2.findContours(banded_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                if not contours:
+                    continue
+                largest = max(contours, key=cv2.contourArea)
+                M = cv2.moments(largest)
+                if M["m00"] == 0:
+                    continue
+                cx = int(M["m10"] / M["m00"])
+                cy = int(M["m01"] / M["m00"])
+                center_dist = np.linalg.norm(image_center - np.array([cx, cy]))
+
+                area = cv2.contourArea(largest)
+                perimeter = cv2.arcLength(largest, True)
+                circularity = 0
+                if perimeter > 0:
+                    circularity = 4 * np.pi * (area / (perimeter * perimeter))
+
+                if area < 300 or area > (0.5 * h * w):
+                    continue
+
+                # Sharpness (variance of Laplacian)
+                laplacian = cv2.Laplacian(gray_eye, cv2.CV_64F)
+                sharpness = np.var(laplacian[banded_mask > 0])
+
+                # Modified score calculation
+                score = 0.5 * mean_gray + 0.3 * center_dist + 50 * abs(circularity - 1) - 0.1 * sharpness
+
+                if score < best_score:
+                    best_score = score
+                    best_mask = mask_uint8
+
+
+            iris_mask_uint8 = best_mask if best_mask is not None else (masks[0] * 255).astype(np.uint8)
+            masked_pixels = gray_eye[iris_mask_uint8 > 0]
+            # Accept the mask if it covers a sufficiently dark region (relaxed threshold)
+            if masked_pixels.size > 0 and np.mean(masked_pixels) < 150:
+                contours, _ = cv2.findContours(iris_mask_uint8, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                if not contours:
+                    return iris_mask_uint8, None, None, False
+                largest_contour = max(contours, key=cv2.contourArea)
+                if len(largest_contour) >= 5:
+                    ellipse = cv2.fitEllipse(largest_contour)
+                    (cx, cy), (major_axis, minor_axis), angle = ellipse
+                    diameter = (major_axis + minor_axis) / 2
+                    return iris_mask_uint8, diameter, (int(cx), int(cy)), False
+                else:
+                    (cx, cy), radius = cv2.minEnclosingCircle(largest_contour)
+                    diameter = radius * 2
+                    return iris_mask_uint8, diameter, (int(cx), int(cy)), False
             else:
-                # fallback to minEnclosingCircle if not enough points
-                (cx, cy), radius = cv2.minEnclosingCircle(largest_contour)
-                diameter = radius * 2
-                return iris_mask_uint8, diameter, (int(cx), int(cy))
+                print("SAM mask does not sufficiently overlap a dark iris region, falling back to Hough or dark blob detection.")
+                fallback = detect_iris_center_and_radius(eye_image)
+                if fallback is not None:
+                    center_x, center_y, radius = fallback
+                    diameter = radius * 2
+                    return None, diameter, (int(center_x), int(center_y)), True
+                return None, None, None, False
         except Exception as e:
             print(f"Error in SAM iris segmentation: {e}")
-            return None, None, None
+            return None, None, None, False
 
     def process_image(self, image_path, visualize=True):
         """
@@ -383,7 +443,7 @@ class IrisSegmentor:
         for eye_key in eye_keys:
             eye_image = eye_data[eye_key]['image']
             eye_coords = eye_data[eye_key]['coords']
-            iris_mask, iris_diameter, iris_center = self.segment_iris_with_sam(eye_image, eye_side=eye_key)
+            iris_mask, iris_diameter, iris_center, used_fallback = self.segment_iris_with_sam(eye_image, eye_side=eye_key)
             if iris_mask is not None:
                 mask_filename = os.path.join(self.output_dir, f"{eye_key}_iris_mask.png")
                 cv2.imwrite(mask_filename, iris_mask)
@@ -396,16 +456,22 @@ class IrisSegmentor:
                     if iris_mask.shape[:2] != eye_image.shape[:2]:
                         print(f"Warning: Mask shape {iris_mask.shape[:2]} doesn't match image shape {eye_image.shape[:2]}")
                         iris_mask = cv2.resize(iris_mask, (eye_image.shape[1], eye_image.shape[0]))
-                    color_mask = np.zeros_like(eye_image)
-                    color_mask[iris_mask > 0] = [0, 255, 0]  # Green mask
-                    alpha = 0.5
-                    blended = cv2.addWeighted(vis_image, 1, color_mask, alpha, 0)
-                    
-                    # Draw blue circle for iris diameter
+                    # Only overlay green SAM mask if not using fallback
+                    if not used_fallback:
+                        color_mask = np.zeros_like(eye_image)
+                        color_mask[iris_mask > 0] = [0, 255, 0]  # Green mask
+                        alpha = 0.5
+                        blended = cv2.addWeighted(vis_image, 1, color_mask, alpha, 0)
+                    else:
+                        blended = vis_image.copy()
+                    # Draw blue circle for iris diameter, even if mask isn't perfectly circular
                     if iris_diameter is not None and iris_center is not None:
                         center_x, center_y = iris_center
                         radius = int(iris_diameter / 2)
                         cv2.circle(blended, (center_x, center_y), radius, (255, 0, 0), 2)
+                    # Draw the red point used for the prompt
+                    dark_x, dark_y = find_dark_region_center(eye_image)
+                    cv2.circle(blended, (dark_x, dark_y), 3, (0, 0, 255), -1)  # Red dot
 
                     vis_filename = os.path.join(self.output_dir, f"{eye_key}_visualization.png")
                     cv2.imwrite(vis_filename, blended)

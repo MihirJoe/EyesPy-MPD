@@ -12,3 +12,5 @@ avneesh_blinking.mov
 *.pth
 *.dat
 *.png
+
+weights/
