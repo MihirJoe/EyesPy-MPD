@@ -1,3 +1,5 @@
+import cv2
+from segment_anything import sam_model_registry, SamPredictor
 import tkinter as tk
 from tkinter import ttk  # For better widgets including scrollbars
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
@@ -80,6 +82,12 @@ class EyeTrackingGUI:
             self.image_folder = self.image_folder + os.path.sep
             
         self.data_file = data_file
+        self.pixels_per_mm = None
+        self.cap = cv2.VideoCapture(0)
+
+        sam_checkpoint = "sam_vit_b_01ec64.pth"  # Update this to your SAM checkpoint path
+        sam = sam_model_registry["vit_b"](checkpoint=sam_checkpoint)
+        self.predictor = SamPredictor(sam)
 
         # Load Image Pairs
         self.image_pairs = self.get_eye_image_pairs()
@@ -111,6 +119,35 @@ class EyeTrackingGUI:
         self.prev_button.pack(side="left", padx=10)
         self.next_button = tk.Button(self.button_frame, text="Next ▶", command=self.load_next_pair)
         self.next_button.pack(side="right", padx=10)
+        self.calibrate_button = tk.Button(self.button_frame, text="Calibrate", command=self.calibrate)
+        self.calibrate_button.pack(side="left", padx=10)
+    def calibrate(self):
+        ret, frame = self.cap.read()
+        if not ret:
+            print("Error: Could not capture frame for calibration.")
+            return
+
+        # Optional: crop tight around the eye if you want, for now use full frame
+        eye_crop = frame
+
+        self.predictor.set_image(eye_crop)
+
+        input_point = np.array([[eye_crop.shape[1] // 2, eye_crop.shape[0] // 2]])
+        input_label = np.array([1])
+
+        masks, scores, logits = self.predictor.predict(
+            point_coords=input_point,
+            point_labels=input_label,
+            multimask_output=True
+        )
+
+        best_mask = masks[np.argmax(scores)]
+
+        x, y, w, h = cv2.boundingRect(best_mask.astype(np.uint8))
+        corneal_diameter_px = w
+
+        self.pixels_per_mm = corneal_diameter_px / 11.8
+        print(f"Calibration complete: {self.pixels_per_mm:.2f} pixels per mm")
 
         # Image frames with calculated sizes
         self.frame_od = tk.Frame(content_frame, width=self.image_width, height=self.image_height)

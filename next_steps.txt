@@ -1,0 +1,6 @@
+- pupil detection using sam
+    - fix this (4/14)
+- integration into code
+    - working for live video
+- updated gui for image / video upload
+

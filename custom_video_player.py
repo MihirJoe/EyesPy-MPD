@@ -149,6 +149,10 @@ class CustomVideoPlayer:
         self.right_mrd1_label = tk.Label(self.measurements_frame, text="MRD1: --")
         self.right_mrd1_label.grid(row=2, column=1, padx=10, pady=2, sticky=tk.W)
         
+        # Add calibration info label
+        self.calibration_label = tk.Label(self.measurements_frame, text="Calibration: --", font=("Arial", 10, "italic"))
+        self.calibration_label.grid(row=3, column=0, columnspan=2, padx=10, pady=5, sticky=tk.W)
+        
         # State variables
         self.is_playing = False
         self.thread = None
@@ -239,19 +243,41 @@ class CustomVideoPlayer:
         measurements = self.get_frame_measurements(frame_number)
         
         if measurements is not None:
-            # Update left eye measurements
-            if 'left_palpebral_height' in measurements:
+            # Update left eye measurements - prioritize mm values if available
+            if 'left_palpebral_height_mm' in measurements:
+                self.left_vph_label.config(text=f"VPH: {measurements['left_palpebral_height_mm']:.2f} mm")
+            elif 'left_palpebral_height' in measurements:
                 self.left_vph_label.config(text=f"VPH: {measurements['left_palpebral_height']:.2f} mm")
+            elif 'left_palpebral_height_px' in measurements:
+                self.left_vph_label.config(text=f"VPH: {measurements['left_palpebral_height_px']:.2f} px")
             
-            if 'left_pupil_to_lower' in measurements:
+            if 'left_pupil_to_lower_mm' in measurements:
+                self.left_mrd1_label.config(text=f"MRD1: {measurements['left_pupil_to_lower_mm']:.2f} mm")
+            elif 'left_pupil_to_lower' in measurements:
                 self.left_mrd1_label.config(text=f"MRD1: {measurements['left_pupil_to_lower']:.2f} mm")
+            elif 'left_pupil_to_lower_px' in measurements:
+                self.left_mrd1_label.config(text=f"MRD1: {measurements['left_pupil_to_lower_px']:.2f} px")
             
-            # Update right eye measurements
-            if 'right_palpebral_height' in measurements:
+            # Update right eye measurements - prioritize mm values if available
+            if 'right_palpebral_height_mm' in measurements:
+                self.right_vph_label.config(text=f"VPH: {measurements['right_palpebral_height_mm']:.2f} mm")
+            elif 'right_palpebral_height' in measurements:
                 self.right_vph_label.config(text=f"VPH: {measurements['right_palpebral_height']:.2f} mm")
+            elif 'right_palpebral_height_px' in measurements:
+                self.right_vph_label.config(text=f"VPH: {measurements['right_palpebral_height_px']:.2f} px")
             
-            if 'right_pupil_to_lower' in measurements:
+            if 'right_pupil_to_lower_mm' in measurements:
+                self.right_mrd1_label.config(text=f"MRD1: {measurements['right_pupil_to_lower_mm']:.2f} mm")
+            elif 'right_pupil_to_lower' in measurements:
                 self.right_mrd1_label.config(text=f"MRD1: {measurements['right_pupil_to_lower']:.2f} mm")
+            elif 'right_pupil_to_lower_px' in measurements:
+                self.right_mrd1_label.config(text=f"MRD1: {measurements['right_pupil_to_lower_px']:.2f} px")
+                
+            # Display calibration information if available
+            if 'calibration_factor' in measurements and hasattr(self, 'calibration_label'):
+                self.calibration_label.config(text=f"Calibration: {measurements['calibration_factor']:.5f} mm/px")
+            elif 'pupil_diameter_px' in measurements and hasattr(self, 'calibration_label'):
+                self.calibration_label.config(text=f"Pupil diameter: {measurements['pupil_diameter_px']:.2f} px")
     
     def update_frame(self):
         """Update the current frame display"""
